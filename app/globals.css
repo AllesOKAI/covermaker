@@ -92,11 +92,11 @@ button, input, textarea { font: inherit; } button { cursor: pointer; }
 .signal-readout span { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; color: #766a78; font-size: 12px; }
 .signal-readout span + span { border-left: 1px solid #d2cbd3; } .signal-readout b { color: #29022f; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .seed-badge { padding: 7px 10px; border: 1px solid #cec7cf; border-radius: 999px; background: rgba(255,255,255,.6); color: #756977; font: 11px ui-monospace, monospace; }
-.artboards { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(210px, .62fr); gap: clamp(20px, 3vw, 40px); align-items: start; }
+.artboards { display: grid; grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, .62fr)); gap: clamp(20px, 3vw, 40px); align-items: start; }
 .artboard-card { min-width: 0; } .artboard-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
 .artboard-label span { font-size: 14px; font-weight: 700; } .artboard-label small { color: #817583; font-size: 12px; }
 .artboard { overflow: hidden; border: 1px solid rgba(41,2,47,.22); background: transparent; box-shadow: 0 20px 55px rgba(41,2,47,.1); }
-.artboard-card--story .artboard { width: min(100%, 340px); margin: 0 auto; } .artboard-card > button { width: 100%; margin-top: 12px; background: #29022f; }
+.artboard-card--story .artboard { width: min(100%, 340px); margin: 0 auto; } .artboard-card--linkedin { grid-column: 1 / -1; } .artboard-card > button { width: 100%; margin-top: 12px; background: #29022f; }
 .fallback-note { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; margin-top: 30px; padding: 14px 16px; border: 1px solid #d6d0d7; border-radius: 9px; background: rgba(255,255,255,.68); color: #776b79; font-size: 12px; line-height: 1.45; }
 .fallback-note strong { color: #29022f; white-space: nowrap; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 100; padding: 12px 16px; border-radius: 8px; background: #29022f; color: white; box-shadow: 0 14px 40px rgba(41,2,47,.28); font-size: 14px; }
@@ -110,7 +110,7 @@ button, input, textarea { font: inherit; } button { cursor: pointer; }
   .brand-tabs { width: 100%; } .brand-tabs button { min-width: 0; } .tabbar p { display: none; } .workspace { min-height: calc(100vh - 124px); }
   .control-panel { padding: 24px 18px 100px; } .sticky-actions { margin-inline: -18px; padding-inline: 18px; } .preview-stage { padding: 24px 16px 34px; }
   .stage-head { align-items: flex-start; } .stage-head h2 { font-size: 21px; } .seed-picker { flex-direction: column; border-radius: 10px; }
-  .artboards { grid-template-columns: 1fr; } .artboard-card--story .artboard { width: min(76%, 340px); } .fallback-note { grid-template-columns: 1fr; }
+  .artboards { grid-template-columns: 1fr; } .artboard-card--story .artboard { width: min(76%, 340px); } .artboard-card--linkedin { grid-column: auto; } .fallback-note { grid-template-columns: 1fr; }
   .signal-readout { grid-template-columns: 1fr; } .signal-readout span + span { border-left: 0; border-top: 1px solid #d2cbd3; }
 }
 @media (prefers-reduced-motion: no-preference) { .artboard, .explore-canvas { animation: reveal .45s ease both; } @keyframes reveal { from { opacity: 0; transform: translateY(8px); } } }

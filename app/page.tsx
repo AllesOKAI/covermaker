@@ -34,13 +34,13 @@ const STORAGE_PRESETS = "allesokai-cover-presets-v4";
 const STORAGE_DRAFT = "allesokai-cover-draft-v4";
 
 const initialPreset: SeasonPreset = {
-  id: "season-01", name: "Season 01 / Contour Field", version: 1, generatorVersion: "contour-3.0",
-  carrier: { wave: "sine", frequency: 1.45, amplitude: 0.135 },
-  modulator: { wave: "sine", ratio: 2.3, depth: 0.42, phase: 0.2 },
+  id: "season-01", name: "Season 01 / Contour Field", version: 2, generatorVersion: "contour-3.0",
+  carrier: { wave: "triangle", frequency: 1.55, amplitude: 0.055 },
+  modulator: { wave: "sine", ratio: 1.3, depth: 0.26, phase: 0.31 },
   field: {
-    lineCount: 34, rotation: -5, warp: 0.18, mode: "lines",
-    firstWidth: 4, lastWidth: 12, widthCurve: "ease-in",
-    dotDensity: 56, depthTint: 0.42, perspective: 0.34, phaseSpread: 0.22,
+    lineCount: 49, rotation: 4, warp: 0.21, mode: "lines",
+    firstWidth: 2, lastWidth: 9.5, widthCurve: "ease-in",
+    dotDensity: 56, depthTint: 0.72, perspective: 0.73, phaseSpread: 0.42,
   },
   variation: { phase: 0.45, ratio: 0.2, warp: 0.12 },
 };
@@ -154,7 +154,7 @@ function patternGeometry(preset: SeasonPreset, seedKey: string, width: number, h
 
 function Pattern({ preset, seedKey, width, height, clipId, accent }: { preset: SeasonPreset; seedKey: string; width: number; height: number; clipId: string; accent: string }) {
   const geometry = useMemo(() => patternGeometry(preset, seedKey, width, height), [preset, seedKey, width, height]);
-  const scale = width / 1000;
+  const scale = Math.min(width / 1000, height / 1000);
   const lineWidth = (depth: number) => (preset.field.firstWidth + (preset.field.lastWidth - preset.field.firstWidth) * curveDepth(depth, preset.field.widthCurve)) * scale;
   const lineColor = (depth: number) => mixHex(accent, "#FFFFFF", 0.14 + preset.field.depthTint * depth);
   return <g clipPath={`url(#${clipId})`}>
@@ -170,19 +170,22 @@ function Pattern({ preset, seedKey, width, height, clipId, accent }: { preset: S
   </g>;
 }
 
-type CoverProps = { episode: Episode; preset: SeasonPreset; format: "square" | "story"; logoData: string; svgRef?: React.RefObject<SVGSVGElement | null> };
+type ArtworkFormat = "square" | "story" | "story-clean" | "linkedin";
+type CoverProps = { episode: Episode; preset: SeasonPreset; format: ArtworkFormat; logoData: string; svgRef?: React.RefObject<SVGSVGElement | null> };
 function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
-  const square = format === "square"; const width = square ? 1000 : 1080; const height = square ? 1000 : 1920;
+  const square = format === "square"; const linkedin = format === "linkedin"; const coverLayout = square || linkedin; const cleanStory = format === "story-clean";
+  const width = linkedin ? 1914 : square ? 1000 : 1080; const height = coverLayout ? 1000 : 1920;
   const seedKey = episodeSeed(episode, preset, "shared-pattern"); const clipId = `field-${format}-${hashString(seedKey)}`;
-  const title = wrapTitle(episode.title, square ? 19 : 18, square ? 3 : 5); const people = episode.people.slice(0, 3);
+  const title = wrapTitle(episode.title, linkedin ? 32 : square ? 19 : 18, coverLayout ? 3 : 5); const people = cleanStory ? [] : episode.people.slice(0, 3);
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
-  const portraitSize = square ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = square ? 104 : 62;
-  const portraitY = square ? 708 : 1160; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
-  const lineHeight = square ? 88 : 118; const titleSize = square ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
-  const field = square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: 1545, r: 72 };
+  const portraitSize = coverLayout ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = coverLayout ? 104 : 62;
+  const portraitY = coverLayout ? 708 : 1450; const titleX = coverLayout ? 112 : 92; const titleY = coverLayout ? 320 : 385;
+  const lineHeight = coverLayout ? 88 : 118; const titleSize = coverLayout ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
+  const field = linkedin ? { x: 22, y: 23, w: 1870, h: 760, r: 56 } : square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: cleanStory ? 1633 : 1545, r: 72 };
+  const formatLabel = linkedin ? "LinkedIn" : cleanStory ? "Portrait-free 9 by 16" : square ? "Square" : "9 by 16";
 
-  return <svg ref={svgRef} className={`cover-svg cover-svg--${format}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${square ? "Square" : "9 by 16"} cover preview for episode ${episodeLabel}`} xmlns="http://www.w3.org/2000/svg">
+  return <svg ref={svgRef} className={`cover-svg cover-svg--${format}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${formatLabel} cover preview for episode ${episodeLabel}`} xmlns="http://www.w3.org/2000/svg">
     <defs>
       <clipPath id={clipId}><rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.r} /></clipPath>
       {people.map((person, index) => <clipPath key={person.id} id={`portrait-${format}-${person.id}`}><circle cx={portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2} cy={portraitY + portraitSize / 2} r={portraitSize / 2 - 8} /></clipPath>)}
@@ -190,21 +193,21 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
     <rect width={width} height={height} fill={PURPLE} />
     <rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.r} fill={episode.accent} />
     <Pattern preset={preset} seedKey={seedKey} width={width} height={height} clipId={clipId} accent={episode.accent} />
-    <path d={square ? "M0 0H450V78Q450 126 402 126H0Z" : "M0 0H650V108Q650 180 578 180H0Z"} fill={PURPLE} />
-    <text x={square ? 45 : 62} y={square ? 86 : 123} fontFamily="SpockPro" fontSize={square ? 52 : 72} letterSpacing="1" fill={episode.accent}>EPISODE</text>
-    <text x={square ? 292 : 402} y={square ? 86 : 123} fontFamily="SpockPro" fontWeight="700" fontSize={square ? 54 : 76} fill="#FFFFFF">{episodeLabel}</text>
+    <path d={coverLayout ? "M0 0H450V78Q450 126 402 126H0Z" : "M0 0H650V108Q650 180 578 180H0Z"} fill={PURPLE} />
+    <text x={coverLayout ? 45 : 62} y={coverLayout ? 86 : 123} fontFamily="SpockPro" fontSize={coverLayout ? 52 : 72} letterSpacing="1" fill={episode.accent}>EPISODE</text>
+    <text x={coverLayout ? 292 : 402} y={coverLayout ? 86 : 123} fontFamily="SpockPro" fontWeight="700" fontSize={coverLayout ? 54 : 76} fill="#FFFFFF">{episodeLabel}</text>
     <text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
       {title.lines.map((line, index) => <tspan key={line + index} x={titleX} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
     </text>
-    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (square ? 90 : 132)} fontFamily="SpockEss" fontSize={square ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
+    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (coverLayout ? 90 : 132)} fontFamily="SpockEss" fontSize={coverLayout ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
     {people.map((person, index) => {
       const cx = portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2; const cy = portraitY + portraitSize / 2;
       return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + 8} y={cy - portraitSize / 2 + 8} width={portraitSize - 16} height={portraitSize - 16} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
     })}
-    {square ? <>
-      <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />
-      <image href={logoHref} x="688" y="645" width="270" height="270" />
-      <text x="686" y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
+    {coverLayout ? <>
+      {linkedin ? <path d="M1606 620H1914V1000H1554V672Q1554 620 1606 620Z" fill="#FFFFFF" /> : <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />}
+      <image href={logoHref} x={linkedin ? 1629 : 715} y="672" width="216" height="216" />
+      <text x={linkedin ? 1600 : 686} y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
       {episode.tag && <text x="112" y="928" fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
     </> : <>
       <path d="M795 1507H1080V1920H741V1561Q741 1507 795 1507Z" fill="#FFFFFF" />
@@ -243,7 +246,7 @@ async function exportCover(svg: SVGSVGElement, width: number, height: number, fi
 export default function Home() {
   const [presets, setPresets] = useState<SeasonPreset[]>([initialPreset]); const [preset, setPreset] = useState<SeasonPreset>(initialPreset);
   const [episode, setEpisode] = useState<Episode>(initialEpisode); const [exploreSeed, setExploreSeed] = useState(215); const [logoData, setLogoData] = useState(""); const [notice, setNotice] = useState("");
-  const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
+  const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const cleanStoryRef = useRef<SVGSVGElement>(null); const linkedinRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
 
   useEffect(() => {
     try {
@@ -288,10 +291,16 @@ export default function Home() {
   };
   const addGuest = () => { if (!episode.people.some((person) => person.role === "guest")) setEpisodeField("people", [...episode.people, { id: `guest-${Date.now()}`, name: "Guest", role: "guest", image: guestSamples[(episode.number + preset.version) % guestSamples.length] }]); };
   const handleGuestFile = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { const guest = { id: `guest-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ""), role: "guest" as const, image: String(reader.result) }; setEpisodeField("people", [...episode.people.filter((person) => person.role !== "guest"), guest]); }; reader.readAsDataURL(file); };
-  const doExport = async (format: "square" | "story") => {
-    const svg = format === "square" ? squareRef.current : storyRef.current; if (!svg) return; setNotice(`Rendering ${format === "square" ? "3000 × 3000" : "1080 × 1920"} PNG…`);
+  const doExport = async (format: ArtworkFormat) => {
+    const targets = {
+      square: { ref: squareRef, width: 3000, height: 3000, label: "3000 × 3000" },
+      story: { ref: storyRef, width: 1080, height: 1920, label: "1080 × 1920" },
+      "story-clean": { ref: cleanStoryRef, width: 1080, height: 1920, label: "1080 × 1920" },
+      linkedin: { ref: linkedinRef, width: 1200, height: 627, label: "1200 × 627" },
+    } as const;
+    const target = targets[format]; const svg = target.ref.current; if (!svg) return; setNotice(`Rendering ${target.label} PNG…`);
     try {
-      const result = await exportCover(svg, format === "square" ? 3000 : 1080, format === "square" ? 3000 : 1920, `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`);
+      const result = await exportCover(svg, target.width, target.height, `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`);
       setNotice(`PNG ready · ${result.width} × ${result.height} · ${Math.round(result.bytes / 1024)} KB`);
     }
     catch { setNotice("Export failed — please try again"); } setTimeout(() => setNotice(""), 10000);
@@ -334,7 +343,7 @@ export default function Home() {
           <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}><img src={person.image} alt="" /><div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>
-        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, two compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; the tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
+        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, four compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div><div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; the tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
       </TabsContent>
     </Tabs>
     {notice && <div className="toast" role="status">{notice}</div>}
