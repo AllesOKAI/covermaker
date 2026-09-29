@@ -19,7 +19,7 @@ type SeasonPreset = {
   field: {
     lineCount: number; rotation: number; warp: number; mode: RenderMode;
     firstWidth: number; lastWidth: number; widthCurve: WidthCurve;
-    relief: number; depthTint: number; perspective: number; phaseSpread: number;
+    dotDensity: number; depthTint: number; perspective: number; phaseSpread: number;
   };
   variation: { phase: number; ratio: number; warp: number };
 };
@@ -34,13 +34,13 @@ const STORAGE_PRESETS = "allesokai-cover-presets-v4";
 const STORAGE_DRAFT = "allesokai-cover-draft-v4";
 
 const initialPreset: SeasonPreset = {
-  id: "season-01", name: "Season 01 / Contour Relief", version: 1, generatorVersion: "relief-2.0",
+  id: "season-01", name: "Season 01 / Contour Field", version: 1, generatorVersion: "contour-3.0",
   carrier: { wave: "sine", frequency: 1.45, amplitude: 0.135 },
   modulator: { wave: "sine", ratio: 2.3, depth: 0.42, phase: 0.2 },
   field: {
     lineCount: 34, rotation: -5, warp: 0.18, mode: "lines",
     firstWidth: 4, lastWidth: 12, widthCurve: "ease-in",
-    relief: 0.62, depthTint: 0.42, perspective: 0.34, phaseSpread: 0.22,
+    dotDensity: 56, depthTint: 0.42, perspective: 0.34, phaseSpread: 0.22,
   },
   variation: { phase: 0.45, ratio: 0.2, warp: 0.12 },
 };
@@ -55,6 +55,20 @@ const initialEpisode: Episode = {
 };
 
 const guestSamples = ["/assets/guests/random-person1.jpeg", "/assets/guests/random-person2.jpeg", "/assets/guests/random-person3.jpeg"];
+
+function normalizePreset(value: SeasonPreset): SeasonPreset {
+  const legacyField = value.field as SeasonPreset["field"] & { relief?: number };
+  const { relief: _removedRelief, ...savedField } = legacyField;
+  return {
+    ...initialPreset,
+    ...value,
+    generatorVersion: "contour-3.0",
+    carrier: { ...initialPreset.carrier, ...value.carrier },
+    modulator: { ...initialPreset.modulator, ...value.modulator },
+    field: { ...initialPreset.field, ...savedField },
+    variation: { ...initialPreset.variation, ...value.variation },
+  };
+}
 
 function hashString(value: string) {
   let hash = 2166136261;
@@ -118,17 +132,21 @@ function patternGeometry(preset: SeasonPreset, seedKey: string, width: number, h
   const count = preset.field.lineCount; const marginLines = Math.ceil(count * 0.38); const overscan = 0.28;
   for (let lineIndex = -marginLines; lineIndex < count + marginLines; lineIndex += 1) {
     const points: Array<[number, number]> = [];
-    for (let step = 0; step <= 70; step += 1) {
-      const x = -overscan + (step / 70) * (1 + overscan * 2); const rawDepth = (lineIndex + 0.5) / count;
+    const pointAt = (step: number, totalSteps: number) => {
+      const x = -overscan + (step / totalSteps) * (1 + overscan * 2); const rawDepth = (lineIndex + 0.5) / count;
       const depth = clamp(rawDepth); const baseY = rawDepth < 0 || rawDepth > 1 ? rawDepth : Math.pow(rawDepth, 1 + preset.field.perspective * 1.35);
       const mod = wave(preset.modulator.wave, x * (preset.carrier.frequency * (preset.modulator.ratio + ratioShift)) + preset.modulator.phase + phaseShift + depth * preset.field.phaseSpread);
       const carrier = wave(preset.carrier.wave, x * preset.carrier.frequency + phaseShift + lineIndex * 0.016 + depth * preset.field.phaseSpread + mod * preset.modulator.depth);
       const spatial = Math.sin((x * 1.7 + baseY * 1.25 + phaseShift) * Math.PI * 2);
       const amplitudeDepth = 0.7 + depth * preset.field.perspective * 0.85;
       const y = baseY + carrier * preset.carrier.amplitude * amplitudeDepth + spatial * (preset.field.warp + warpShift) * 0.18;
-      points.push([x * width, y * height]);
-      if (preset.field.mode === "dots" && step % 3 === 0) dots.push({ x: x * width, y: y * height, depth });
+      return { x: x * width, y: y * height, depth };
+    };
+    for (let step = 0; step <= 70; step += 1) {
+      const { x, y } = pointAt(step, 70);
+      points.push([x, y]);
     }
+    if (preset.field.mode === "dots") for (let dotIndex = 0; dotIndex < preset.field.dotDensity; dotIndex += 1) dots.push(pointAt(dotIndex, Math.max(1, preset.field.dotDensity - 1)));
     paths.push({ d: points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" "), depth: clamp((lineIndex + 0.5) / count) });
   }
   return { paths, dots };
@@ -138,20 +156,15 @@ function Pattern({ preset, seedKey, width, height, clipId, accent }: { preset: S
   const geometry = useMemo(() => patternGeometry(preset, seedKey, width, height), [preset, seedKey, width, height]);
   const scale = width / 1000;
   const lineWidth = (depth: number) => (preset.field.firstWidth + (preset.field.lastWidth - preset.field.firstWidth) * curveDepth(depth, preset.field.widthCurve)) * scale;
-  const lineColor = (depth: number) => mixHex(accent, "#FFFFFF", 0.14 + preset.field.depthTint * (1 - depth));
-  const shadowColor = mixHex(accent, PURPLE, 0.34);
+  const lineColor = (depth: number) => mixHex(accent, "#FFFFFF", 0.14 + preset.field.depthTint * depth);
   return <g clipPath={`url(#${clipId})`}>
     <g transform={`rotate(${preset.field.rotation} ${width / 2} ${height / 2})`}>
       {preset.field.mode === "lines" ? geometry.paths.map((path, index) => {
-        const thickness = lineWidth(path.depth); const relief = preset.field.relief * 5 * scale;
-        return <g key={index}>
-          <path d={path.d} fill="none" stroke={shadowColor} strokeOpacity={0.2 + preset.field.relief * 0.22} strokeWidth={thickness + relief * 2.2} strokeLinecap="round" transform={`translate(0 ${relief.toFixed(2)})`} />
-          <path d={path.d} fill="none" stroke={accent} strokeOpacity="0.96" strokeWidth={thickness + relief * 1.35} strokeLinecap="round" />
-          <path d={path.d} fill="none" stroke={lineColor(path.depth)} strokeOpacity={0.76 + (1 - path.depth) * 0.2} strokeWidth={thickness} strokeLinecap="round" />
-        </g>;
+        const thickness = lineWidth(path.depth);
+        return <path key={index} d={path.d} fill="none" stroke={lineColor(path.depth)} strokeOpacity={0.76 + path.depth * 0.2} strokeWidth={thickness} strokeLinecap="round" />;
       }) : geometry.dots.map((dot, index) => {
-        const radius = Math.max(2.2 * scale, lineWidth(dot.depth) * 0.48); const relief = preset.field.relief * 2.4 * scale;
-        return <g key={index}><circle cx={dot.x} cy={dot.y + relief} r={radius + relief * 0.45} fill={shadowColor} opacity="0.28" /><circle cx={dot.x} cy={dot.y} r={radius} fill={lineColor(dot.depth)} opacity={0.76 + (1 - dot.depth) * 0.2} /></g>;
+        const radius = Math.max(2.2 * scale, lineWidth(dot.depth) * 0.48);
+        return <circle key={index} cx={dot.x} cy={dot.y} r={radius} fill={lineColor(dot.depth)} opacity={0.76 + dot.depth * 0.2} />;
       })}
     </g>
   </g>;
@@ -165,7 +178,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
   const portraitSize = square ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = square ? 104 : 62;
-  const portraitY = square ? 708 : 1268; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
+  const portraitY = square ? 708 : 1160; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
   const lineHeight = square ? 88 : 118; const titleSize = square ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
   const field = square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: 1545, r: 72 };
 
@@ -192,7 +205,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
       <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />
       <image href={logoHref} x="688" y="645" width="270" height="270" />
       <text x="686" y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
-      {episode.tag && <text x="112" y="956" fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
+      {episode.tag && <text x="112" y="928" fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
     </> : <>
       <path d="M795 1507H1080V1920H741V1561Q741 1507 795 1507Z" fill="#FFFFFF" />
       <image href={logoHref} x="791" y="1554" width="242" height="242" />
@@ -235,7 +248,7 @@ export default function Home() {
   useEffect(() => {
     try {
       const savedPresets = localStorage.getItem(STORAGE_PRESETS); const savedDraft = localStorage.getItem(STORAGE_DRAFT);
-      if (savedPresets) { const parsed = JSON.parse(savedPresets) as SeasonPreset[]; if (parsed.length) { setPresets(parsed); setPreset(parsed[parsed.length - 1]); } }
+      if (savedPresets) { const parsed = (JSON.parse(savedPresets) as SeasonPreset[]).map(normalizePreset); if (parsed.length) { setPresets(parsed); setPreset(parsed[parsed.length - 1]); } }
       if (savedDraft) setEpisode(JSON.parse(savedDraft));
     } catch { /* Safe defaults remain. */ }
     fetch("/assets/logo/allesokai-de-logo.svg").then((response) => response.text()).then((source) => setLogoData(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`)).catch(() => undefined);
@@ -302,11 +315,11 @@ export default function Home() {
             <RangeControl label="First line" value={preset.field.firstWidth} min={2} max={24} step={0.5} onChange={(value) => setField("firstWidth", value)} suffix=" px" />
             <RangeControl label="Last line" value={preset.field.lastWidth} min={2} max={24} step={0.5} onChange={(value) => setField("lastWidth", value)} suffix=" px" />
             <SelectControl label="Thickness curve" value={preset.field.widthCurve} onChange={(value) => setField("widthCurve", value as WidthCurve)} options={[{ value: "linear", label: "Linear" }, { value: "ease-in", label: "Ease in" }, { value: "ease-out", label: "Ease out" }]} />
-            <RangeControl label="Relief" value={preset.field.relief} min={0} max={1} step={0.01} onChange={(value) => setField("relief", value)} />
             <RangeControl label="Depth tint" value={preset.field.depthTint} min={0} max={0.8} step={0.01} onChange={(value) => setField("depthTint", value)} />
             <RangeControl label="Perspective" value={preset.field.perspective} min={0} max={1} step={0.01} onChange={(value) => setField("perspective", value)} />
             <RangeControl label="Phase spread" value={preset.field.phaseSpread} min={0} max={0.8} step={0.01} onChange={(value) => setField("phaseSpread", value)} />
             <RangeControl label="Density" value={preset.field.lineCount} min={14} max={54} onChange={(value) => setField("lineCount", value)} />
+            {preset.field.mode === "dots" && <RangeControl label="Dot density" value={preset.field.dotDensity} min={20} max={96} onChange={(value) => setField("dotDensity", value)} />}
             <RangeControl label="Rotation" value={preset.field.rotation} min={-30} max={30} onChange={(value) => setField("rotation", value)} suffix="°" />
             <RangeControl label="Spatial warp" value={preset.field.warp} min={0} max={0.5} step={0.01} onChange={(value) => setField("warp", value)} />
           </section>
