@@ -165,7 +165,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
   const portraitSize = square ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = square ? 104 : 62;
-  const portraitY = square ? 708 : 1450; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
+  const portraitY = square ? 708 : 1268; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
   const lineHeight = square ? 88 : 118; const titleSize = square ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
   const field = square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: 1545, r: 72 };
 
@@ -183,7 +183,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
     <text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
       {title.lines.map((line, index) => <tspan key={line + index} x={titleX} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
     </text>
-    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (square ? 44 : 58)} fontFamily="SpockEss" fontSize={square ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
+    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (square ? 90 : 132)} fontFamily="SpockEss" fontSize={square ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
     {people.map((person, index) => {
       const cx = portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2; const cy = portraitY + portraitSize / 2;
       return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + 8} y={cy - portraitSize / 2 + 8} width={portraitSize - 16} height={portraitSize - 16} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
@@ -192,12 +192,12 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
       <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />
       <image href={logoHref} x="688" y="645" width="270" height="270" />
       <text x="686" y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
-      {episode.tag && <text x="112" y="972" fontFamily="SpockEss" fontSize="52" fill={episode.accent}>{episode.tag}</text>}
+      {episode.tag && <text x="112" y="956" fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
     </> : <>
-      <path d="M700 1370H1080V1920H628V1442Q628 1370 700 1370Z" fill="#FFFFFF" />
-      <image href={logoHref} x="695" y="1432" width="322" height="322" />
-      <text x="693" y="1832" fontFamily="SpockPro" fontWeight="700" fontSize="55" fill={PURPLE}>allesokai.de</text>
-      {episode.tag && <text x="72" y="1808" fontFamily="SpockEss" fontSize="64" fill={episode.accent}>{episode.tag}</text>}
+      <path d="M795 1507H1080V1920H741V1561Q741 1507 795 1507Z" fill="#FFFFFF" />
+      <image href={logoHref} x="791" y="1554" width="242" height="242" />
+      <text x="791" y="1854" fontFamily="SpockPro" fontWeight="700" fontSize="41" fill={PURPLE}>allesokai.de</text>
+      {episode.tag && <text x="72" y="1808" fontFamily="SpockEss" fontWeight="700" fontSize="64" fill={episode.accent}>{episode.tag}</text>}
     </>}
   </svg>;
 }
@@ -321,7 +321,7 @@ export default function Home() {
           <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}><img src={person.image} alt="" /><div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>
-        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, two compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; tag uses the same Regular face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
+        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, two compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; the tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
       </TabsContent>
     </Tabs>
     {notice && <div className="toast" role="status">{notice}</div>}
