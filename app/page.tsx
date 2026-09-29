@@ -10,12 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 type Wave = "sine" | "triangle" | "saw";
 type RenderMode = "lines" | "dots";
+type WidthCurve = "linear" | "ease-in" | "ease-out";
 type Person = { id: string; name: string; role: "host" | "guest"; image: string };
 type SeasonPreset = {
   id: string; name: string; version: number; generatorVersion: string;
   carrier: { wave: Wave; frequency: number; amplitude: number };
   modulator: { wave: Wave; ratio: number; depth: number; phase: number };
-  field: { lineCount: number; rotation: number; warp: number; mode: RenderMode };
+  field: {
+    lineCount: number; rotation: number; warp: number; mode: RenderMode;
+    firstWidth: number; lastWidth: number; widthCurve: WidthCurve;
+    relief: number; depthTint: number; perspective: number; phaseSpread: number;
+  };
   variation: { phase: number; ratio: number; warp: number };
 };
 type Episode = {
@@ -25,14 +30,18 @@ type Episode = {
 
 const PURPLE = "#29022F";
 const LIME = "#94F20D";
-const STORAGE_PRESETS = "allesokai-cover-presets-v3";
-const STORAGE_DRAFT = "allesokai-cover-draft-v3";
+const STORAGE_PRESETS = "allesokai-cover-presets-v4";
+const STORAGE_DRAFT = "allesokai-cover-draft-v4";
 
 const initialPreset: SeasonPreset = {
-  id: "season-01", name: "Season 01 / Signal Flow", version: 1, generatorVersion: "flow-1.0",
+  id: "season-01", name: "Season 01 / Contour Relief", version: 1, generatorVersion: "relief-2.0",
   carrier: { wave: "sine", frequency: 1.45, amplitude: 0.135 },
   modulator: { wave: "sine", ratio: 2.3, depth: 0.42, phase: 0.2 },
-  field: { lineCount: 34, rotation: -5, warp: 0.18, mode: "lines" },
+  field: {
+    lineCount: 34, rotation: -5, warp: 0.18, mode: "lines",
+    firstWidth: 4, lastWidth: 12, widthCurve: "ease-in",
+    relief: 0.62, depthTint: 0.42, perspective: 0.34, phaseSpread: 0.22,
+  },
   variation: { phase: 0.45, ratio: 0.2, warp: 0.12 },
 };
 
@@ -68,6 +77,18 @@ function wave(kind: Wave, value: number) {
   return Math.sin(phase * Math.PI * 2);
 }
 
+function clamp(value: number, min = 0, max = 1) { return Math.min(max, Math.max(min, value)); }
+function curveDepth(value: number, curve: WidthCurve) {
+  if (curve === "ease-in") return value * value;
+  if (curve === "ease-out") return 1 - (1 - value) * (1 - value);
+  return value;
+}
+function mixHex(from: string, to: string, amount: number) {
+  const parse = (color: string) => color.replace("#", "").match(/.{2}/g)?.map((part) => Number.parseInt(part, 16)) ?? [0, 0, 0];
+  const a = parse(from); const b = parse(to); const t = clamp(amount);
+  return `#${a.map((channel, index) => Math.round(channel + (b[index] - channel) * t).toString(16).padStart(2, "0")).join("")}`;
+}
+
 function normalizedTitle(title: string) { return title.trim().toLowerCase().replace(/\s+/g, " "); }
 function episodeSeed(episode: Episode, preset: SeasonPreset, format: string) {
   const identity = episode.seedOverride.trim() || `alles-ok-ai:${episode.number}:${normalizedTitle(episode.title)}`;
@@ -92,30 +113,47 @@ function patternGeometry(preset: SeasonPreset, seedKey: string, width: number, h
   const phaseShift = (random() - 0.5) * preset.variation.phase;
   const ratioShift = (random() - 0.5) * preset.variation.ratio;
   const warpShift = (random() - 0.5) * preset.variation.warp;
-  const paths: string[] = []; const dots: Array<{ x: number; y: number; r: number }> = [];
-  const count = preset.field.lineCount;
-  for (let lineIndex = -2; lineIndex < count + 2; lineIndex += 1) {
+  const paths: Array<{ d: string; depth: number }> = [];
+  const dots: Array<{ x: number; y: number; depth: number }> = [];
+  const count = preset.field.lineCount; const marginLines = Math.ceil(count * 0.38); const overscan = 0.28;
+  for (let lineIndex = -marginLines; lineIndex < count + marginLines; lineIndex += 1) {
     const points: Array<[number, number]> = [];
     for (let step = 0; step <= 70; step += 1) {
-      const x = step / 70; const baseY = (lineIndex + 0.5) / count;
-      const mod = wave(preset.modulator.wave, x * (preset.carrier.frequency * (preset.modulator.ratio + ratioShift)) + preset.modulator.phase + phaseShift);
-      const carrier = wave(preset.carrier.wave, x * preset.carrier.frequency + phaseShift + lineIndex * 0.016 + mod * preset.modulator.depth);
+      const x = -overscan + (step / 70) * (1 + overscan * 2); const rawDepth = (lineIndex + 0.5) / count;
+      const depth = clamp(rawDepth); const baseY = rawDepth < 0 || rawDepth > 1 ? rawDepth : Math.pow(rawDepth, 1 + preset.field.perspective * 1.35);
+      const mod = wave(preset.modulator.wave, x * (preset.carrier.frequency * (preset.modulator.ratio + ratioShift)) + preset.modulator.phase + phaseShift + depth * preset.field.phaseSpread);
+      const carrier = wave(preset.carrier.wave, x * preset.carrier.frequency + phaseShift + lineIndex * 0.016 + depth * preset.field.phaseSpread + mod * preset.modulator.depth);
       const spatial = Math.sin((x * 1.7 + baseY * 1.25 + phaseShift) * Math.PI * 2);
-      const y = baseY + carrier * preset.carrier.amplitude + spatial * (preset.field.warp + warpShift) * 0.18;
+      const amplitudeDepth = 0.7 + depth * preset.field.perspective * 0.85;
+      const y = baseY + carrier * preset.carrier.amplitude * amplitudeDepth + spatial * (preset.field.warp + warpShift) * 0.18;
       points.push([x * width, y * height]);
-      if (preset.field.mode === "dots" && step % 3 === 0) dots.push({ x: x * width, y: y * height, r: width * 0.0044 });
+      if (preset.field.mode === "dots" && step % 3 === 0) dots.push({ x: x * width, y: y * height, depth });
     }
-    paths.push(points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" "));
+    paths.push({ d: points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" "), depth: clamp((lineIndex + 0.5) / count) });
   }
   return { paths, dots };
 }
 
-function Pattern({ preset, seedKey, width, height, clipId }: { preset: SeasonPreset; seedKey: string; width: number; height: number; clipId: string }) {
+function Pattern({ preset, seedKey, width, height, clipId, accent }: { preset: SeasonPreset; seedKey: string; width: number; height: number; clipId: string; accent: string }) {
   const geometry = useMemo(() => patternGeometry(preset, seedKey, width, height), [preset, seedKey, width, height]);
-  return <g clipPath={`url(#${clipId})`} opacity="0.42" transform={`rotate(${preset.field.rotation} ${width / 2} ${height / 2})`}>
-    {preset.field.mode === "lines"
-      ? geometry.paths.map((path, index) => <path key={index} d={path} fill="none" stroke="#FFFFFF" strokeWidth={width * 0.008} strokeLinecap="round" />)
-      : geometry.dots.map((dot, index) => <circle key={index} cx={dot.x} cy={dot.y} r={dot.r} fill="#FFFFFF" />)}
+  const scale = width / 1000;
+  const lineWidth = (depth: number) => (preset.field.firstWidth + (preset.field.lastWidth - preset.field.firstWidth) * curveDepth(depth, preset.field.widthCurve)) * scale;
+  const lineColor = (depth: number) => mixHex(accent, "#FFFFFF", 0.14 + preset.field.depthTint * (1 - depth));
+  const shadowColor = mixHex(accent, PURPLE, 0.34);
+  return <g clipPath={`url(#${clipId})`}>
+    <g transform={`rotate(${preset.field.rotation} ${width / 2} ${height / 2})`}>
+      {preset.field.mode === "lines" ? geometry.paths.map((path, index) => {
+        const thickness = lineWidth(path.depth); const relief = preset.field.relief * 5 * scale;
+        return <g key={index}>
+          <path d={path.d} fill="none" stroke={shadowColor} strokeOpacity={0.2 + preset.field.relief * 0.22} strokeWidth={thickness + relief * 2.2} strokeLinecap="round" transform={`translate(0 ${relief.toFixed(2)})`} />
+          <path d={path.d} fill="none" stroke={accent} strokeOpacity="0.96" strokeWidth={thickness + relief * 1.35} strokeLinecap="round" />
+          <path d={path.d} fill="none" stroke={lineColor(path.depth)} strokeOpacity={0.76 + (1 - path.depth) * 0.2} strokeWidth={thickness} strokeLinecap="round" />
+        </g>;
+      }) : geometry.dots.map((dot, index) => {
+        const radius = Math.max(2.2 * scale, lineWidth(dot.depth) * 0.48); const relief = preset.field.relief * 2.4 * scale;
+        return <g key={index}><circle cx={dot.x} cy={dot.y + relief} r={radius + relief * 0.45} fill={shadowColor} opacity="0.28" /><circle cx={dot.x} cy={dot.y} r={radius} fill={lineColor(dot.depth)} opacity={0.76 + (1 - dot.depth) * 0.2} /></g>;
+      })}
+    </g>
   </g>;
 }
 
@@ -126,7 +164,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
   const title = wrapTitle(episode.title, square ? 19 : 18, square ? 3 : 5); const people = episode.people.slice(0, 3);
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
-  const portraitSize = square ? 158 : 210; const portraitGap = square ? 4 : -24; const portraitStart = square ? 104 : 62;
+  const portraitSize = square ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = square ? 104 : 62;
   const portraitY = square ? 708 : 1450; const titleX = square ? 112 : 92; const titleY = square ? 320 : 385;
   const lineHeight = square ? 88 : 118; const titleSize = square ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
   const field = square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: 1545, r: 72 };
@@ -138,25 +176,25 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
     </defs>
     <rect width={width} height={height} fill={PURPLE} />
     <rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.r} fill={episode.accent} />
-    <Pattern preset={preset} seedKey={seedKey} width={width} height={height} clipId={clipId} />
+    <Pattern preset={preset} seedKey={seedKey} width={width} height={height} clipId={clipId} accent={episode.accent} />
     <path d={square ? "M0 0H450V78Q450 126 402 126H0Z" : "M0 0H650V108Q650 180 578 180H0Z"} fill={PURPLE} />
     <text x={square ? 45 : 62} y={square ? 86 : 123} fontFamily="SpockPro" fontSize={square ? 52 : 72} letterSpacing="1" fill={episode.accent}>EPISODE</text>
     <text x={square ? 292 : 402} y={square ? 86 : 123} fontFamily="SpockPro" fontWeight="700" fontSize={square ? 54 : 76} fill="#FFFFFF">{episodeLabel}</text>
     <text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
       {title.lines.map((line, index) => <tspan key={line + index} x={titleX} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
     </text>
-    {episode.subtitle && <text x={titleX + 6} y={titleY + title.lines.length * lineHeight + (square ? 24 : 48)} fontFamily="SpockEss" fontSize={square ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
+    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (square ? 44 : 58)} fontFamily="SpockEss" fontSize={square ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
     {people.map((person, index) => {
       const cx = portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2; const cy = portraitY + portraitSize / 2;
       return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + 8} y={cy - portraitSize / 2 + 8} width={portraitSize - 16} height={portraitSize - 16} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
     })}
     {square ? <>
-      <rect x="640" y="620" width="365" height="380" rx="52" fill="#FFFFFF" />
+      <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />
       <image href={logoHref} x="688" y="645" width="270" height="270" />
       <text x="686" y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
       {episode.tag && <text x="112" y="972" fontFamily="SpockEss" fontSize="52" fill={episode.accent}>{episode.tag}</text>}
     </> : <>
-      <rect x="628" y="1370" width="452" height="550" rx="72" fill="#FFFFFF" />
+      <path d="M700 1370H1080V1920H628V1442Q628 1370 700 1370Z" fill="#FFFFFF" />
       <image href={logoHref} x="695" y="1432" width="322" height="322" />
       <text x="693" y="1832" fontFamily="SpockPro" fontWeight="700" fontSize="55" fill={PURPLE}>allesokai.de</text>
       {episode.tag && <text x="72" y="1808" fontFamily="SpockEss" fontSize="64" fill={episode.accent}>{episode.tag}</text>}
@@ -228,7 +266,7 @@ export default function Home() {
   const updatePreset = <K extends keyof SeasonPreset>(key: K, value: SeasonPreset[K]) => setPreset((current) => ({ ...current, [key]: value }));
   const setCarrier = (key: keyof SeasonPreset["carrier"], value: number | Wave) => updatePreset("carrier", { ...preset.carrier, [key]: value });
   const setModulator = (key: keyof SeasonPreset["modulator"], value: number | Wave) => updatePreset("modulator", { ...preset.modulator, [key]: value });
-  const setField = (key: keyof SeasonPreset["field"], value: number | RenderMode) => updatePreset("field", { ...preset.field, [key]: value });
+  const setField = (key: keyof SeasonPreset["field"], value: number | RenderMode | WidthCurve) => updatePreset("field", { ...preset.field, [key]: value });
   const setEpisodeField = <K extends keyof Episode>(key: K, value: Episode[K]) => setEpisode((current) => ({ ...current, [key]: value }));
   const selectPreset = (value: string) => { const [id, version] = value.split(":"); const found = presets.find((item) => item.id === id && item.version === Number(version)); if (found) setPreset(found); };
   const savePresetVersion = () => {
@@ -258,7 +296,20 @@ export default function Home() {
           <section className="control-section"><div className="section-title"><span>01</span><h2>Preset identity</h2></div><label className="field-control"><span>Name</span><Input value={preset.name} onChange={(event) => updatePreset("name", event.target.value)} /></label><SelectControl label="Saved version" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
           <section className="control-section"><div className="section-title"><span>02</span><h2>Carrier</h2></div><SelectControl label="Waveform" value={preset.carrier.wave} onChange={(value) => setCarrier("wave", value as Wave)} options={["sine", "triangle", "saw"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} /><RangeControl label="Frequency" value={preset.carrier.frequency} min={0.5} max={4} step={0.05} onChange={(value) => setCarrier("frequency", value)} /><RangeControl label="Amplitude" value={preset.carrier.amplitude} min={0.02} max={0.3} step={0.005} onChange={(value) => setCarrier("amplitude", value)} /></section>
           <section className="control-section"><div className="section-title"><span>03</span><h2>Modulator</h2></div><SelectControl label="Waveform" value={preset.modulator.wave} onChange={(value) => setModulator("wave", value as Wave)} options={["sine", "triangle", "saw"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} /><RangeControl label="Ratio" value={preset.modulator.ratio} min={0.5} max={5} step={0.05} onChange={(value) => setModulator("ratio", value)} /><RangeControl label="Depth" value={preset.modulator.depth} min={0} max={1} step={0.01} onChange={(value) => setModulator("depth", value)} /><RangeControl label="Phase" value={preset.modulator.phase} min={0} max={1} step={0.01} onChange={(value) => setModulator("phase", value)} /></section>
-          <section className="control-section"><div className="section-title"><span>04</span><h2>Field</h2></div><div className="mode-switch" role="group" aria-label="Pattern rendering mode"><button className={preset.field.mode === "lines" ? "active" : ""} onClick={() => setField("mode", "lines")}>Lines</button><button className={preset.field.mode === "dots" ? "active" : ""} onClick={() => setField("mode", "dots")}>Dots</button></div><RangeControl label="Density" value={preset.field.lineCount} min={14} max={54} onChange={(value) => setField("lineCount", value)} /><RangeControl label="Rotation" value={preset.field.rotation} min={-30} max={30} onChange={(value) => setField("rotation", value)} suffix="°" /><RangeControl label="Spatial warp" value={preset.field.warp} min={0} max={0.5} step={0.01} onChange={(value) => setField("warp", value)} /></section>
+          <section className="control-section">
+            <div className="section-title"><span>04</span><h2>Field &amp; depth</h2></div>
+            <div className="mode-switch" role="group" aria-label="Pattern rendering mode"><button className={preset.field.mode === "lines" ? "active" : ""} onClick={() => setField("mode", "lines")}>Lines</button><button className={preset.field.mode === "dots" ? "active" : ""} onClick={() => setField("mode", "dots")}>Dots</button></div>
+            <RangeControl label="First line" value={preset.field.firstWidth} min={2} max={24} step={0.5} onChange={(value) => setField("firstWidth", value)} suffix=" px" />
+            <RangeControl label="Last line" value={preset.field.lastWidth} min={2} max={24} step={0.5} onChange={(value) => setField("lastWidth", value)} suffix=" px" />
+            <SelectControl label="Thickness curve" value={preset.field.widthCurve} onChange={(value) => setField("widthCurve", value as WidthCurve)} options={[{ value: "linear", label: "Linear" }, { value: "ease-in", label: "Ease in" }, { value: "ease-out", label: "Ease out" }]} />
+            <RangeControl label="Relief" value={preset.field.relief} min={0} max={1} step={0.01} onChange={(value) => setField("relief", value)} />
+            <RangeControl label="Depth tint" value={preset.field.depthTint} min={0} max={0.8} step={0.01} onChange={(value) => setField("depthTint", value)} />
+            <RangeControl label="Perspective" value={preset.field.perspective} min={0} max={1} step={0.01} onChange={(value) => setField("perspective", value)} />
+            <RangeControl label="Phase spread" value={preset.field.phaseSpread} min={0} max={0.8} step={0.01} onChange={(value) => setField("phaseSpread", value)} />
+            <RangeControl label="Density" value={preset.field.lineCount} min={14} max={54} onChange={(value) => setField("lineCount", value)} />
+            <RangeControl label="Rotation" value={preset.field.rotation} min={-30} max={30} onChange={(value) => setField("rotation", value)} suffix="°" />
+            <RangeControl label="Spatial warp" value={preset.field.warp} min={0} max={0.5} step={0.01} onChange={(value) => setField("warp", value)} />
+          </section>
           <div className="sticky-actions"><Button variant="outline" onClick={() => setPreset(initialPreset)}><RotateCcw /> Reset</Button><Button onClick={savePresetVersion}><Save /> Save new version</Button></div>
         </aside>
         <section className="preview-stage explore-stage"><div className="stage-head"><div><span className="eyebrow">Live synthesis</span><h2>One family, repeatable variations</h2></div><div className="seed-picker">{[215, 216, 217].map((seed) => <button key={seed} onClick={() => setExploreSeed(seed)} className={seed === exploreSeed ? "active" : ""}>EP {seed}</button>)}</div></div><div className="explore-canvas"><CoverArt episode={sampleEpisode} preset={preset} format="square" logoData={logoData} /></div><div className="signal-readout"><span><b>Seed</b> explore-{exploreSeed}</span><span><b>Generator</b> {preset.generatorVersion}</span><span><b>Mode</b> {preset.field.mode}</span></div></section>

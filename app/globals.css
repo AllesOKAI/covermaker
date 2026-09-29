@@ -86,7 +86,7 @@ button, input, textarea { font: inherit; } button { cursor: pointer; }
 .seed-picker { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: #e3dee4; }
 .seed-picker button { padding: 7px 11px; border: 0; border-radius: 999px; background: transparent; color: #746876; font-size: 12px; font-weight: 700; }
 .seed-picker button.active { background: #29022f; color: white; }
-.explore-canvas { width: min(640px, 75vh, 100%); margin: 0 auto; padding: 16px; border: 1px solid #d8d2d9; background: white; box-shadow: 0 24px 80px rgba(41,2,47,.12); }
+.explore-canvas { width: min(640px, 75vh, 100%); margin: 0 auto; overflow: hidden; border: 1px solid rgba(41,2,47,.22); background: transparent; box-shadow: 0 24px 80px rgba(41,2,47,.12); }
 .cover-svg { display: block; width: 100%; height: auto; background: #29022f; }
 .signal-readout { width: min(640px, 100%); display: grid; grid-template-columns: repeat(3, 1fr); margin: 18px auto 0; border-top: 1px solid #d2cbd3; border-bottom: 1px solid #d2cbd3; }
 .signal-readout span { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; color: #766a78; font-size: 12px; }
@@ -95,7 +95,7 @@ button, input, textarea { font: inherit; } button { cursor: pointer; }
 .artboards { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(210px, .62fr); gap: clamp(20px, 3vw, 40px); align-items: start; }
 .artboard-card { min-width: 0; } .artboard-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
 .artboard-label span { font-size: 14px; font-weight: 700; } .artboard-label small { color: #817583; font-size: 12px; }
-.artboard { padding: 11px; border: 1px solid #d4ced5; background: white; box-shadow: 0 20px 55px rgba(41,2,47,.1); }
+.artboard { overflow: hidden; border: 1px solid rgba(41,2,47,.22); background: transparent; box-shadow: 0 20px 55px rgba(41,2,47,.1); }
 .artboard-card--story .artboard { width: min(100%, 340px); margin: 0 auto; } .artboard-card > button { width: 100%; margin-top: 12px; background: #29022f; }
 .fallback-note { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; margin-top: 30px; padding: 14px 16px; border: 1px solid #d6d0d7; border-radius: 9px; background: rgba(255,255,255,.68); color: #776b79; font-size: 12px; line-height: 1.45; }
 .fallback-note strong { color: #29022f; white-space: nowrap; }
