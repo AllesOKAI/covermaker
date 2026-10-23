@@ -9,7 +9,7 @@
     "install:ci": "node scripts/install-ci.mjs",
     "dev": "vite",
     "build": "vinext build",
-    "start": "vite preview --host 127.0.0.1",
+    "start": "vite preview --host 127.0.0.1 --port 8787 --strictPort",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
