@@ -65,11 +65,10 @@ GitHub Pages.
 
 ## Bekannte Punkte
 
-- `npm run lint` meldet derzeit einen bestehenden Fehler
-  (`react-hooks/set-state-in-effect`, Logo-Fetch in `app/page.tsx`)
-  plus zwei `no-img-element`-Warnungen — alles Vorbestand vor der
-  Static-Site-Umstellung. Neue PRs dürfen keine zusätzlichen Fehler
-  einführen; Behebung des Bestands ist willkommen.
 - vinext ist Beta (1.0.0-beta.5). Bei Upgrade: Build + `npm start`
   Smoke-Test und Blick in `dist/client/` (index.html, `_next/`,
   `assets/`, `CNAME`) gehören dazu.
+- Das index.html ist ~400 KB (gzip ~116 KB), weil alle fünf
+  Artwork-Varianten mit ihren SVG-Mustern vorgerendert eingebettet
+  sind — gewollt, kein Fehler. Bei deutlicher Größenänderung hier
+  nachsehen, ob die Muster-Erzeugung aus dem Ruder läuft.
