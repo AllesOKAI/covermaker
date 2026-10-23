@@ -19,13 +19,15 @@ npm run build
 
 Der statische Export liegt unter `dist/client/` (reines HTML/JS/CSS,
 `dist/server/` ist ein Überbleibsel der vinext-Build-Pipeline und wird
-nicht ausgeliefert). Zum lokalen Testen:
+nicht ausgeliefert). Zum lokalen Testen der Production-Builds:
 
 ```bash
-python3 -m http.server 8787 --directory dist/client
+npm start
 ```
 
-Öffne `http://127.0.0.1:8787`.
+Öffne `http://127.0.0.1:8787` (Port/Host per
+`npm start -- --port 4000` änderbar). Für die Entwicklung mit HMR
+dient weiterhin `npm run dev`.
 
 ## Deployment
 
@@ -47,7 +49,7 @@ Einmalig im Repository einzurichten (unter *Settings → Pages*):
 
 ## Dateien und Persistenz
 
-Die Dateien `public/CNAME` und die `output: 'export'`-Konfiguration in
+Die Datei `public/CNAME` und die `output: 'export'`-Konfiguration in
 `next.config.ts` sind für Pages erforderlich. Alte Browser-Daten aus der
 Cloudflare-Ära bleiben erhalten — sie liegen im Browser und hängen an
 keinerlei Server-Umgebung.
