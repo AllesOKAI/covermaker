@@ -1,49 +1,53 @@
 # Alles OK AI Cover Maker deployment
 
-## Requirements
+Die App ist eine statische Website und wird über GitHub Pages auf
+[covermaker.allesokai.de](https://covermaker.allesokai.de) gehostet.
+Es gibt kein Backend — Presets, Drafts und hochgeladene Bilder liegen
+ausschließlich im Browser der jeweiligen Besucher:in.
 
-- Node.js 22.13 or newer
+## Anforderungen
+
+- Node.js 22.13 oder neuer
 - npm
 
-## Install and build
+## Bauen und lokal testen
 
 ```bash
 npm ci
 npm run build
 ```
 
-The generated application is written to `dist/`. It contains a Cloudflare Worker in `dist/server/` and its browser assets in `dist/client/`.
-
-## Test the production build locally
-
-```bash
-npm start -- --port 8787
-```
-
-Open `http://127.0.0.1:8787`.
-
-## Deploy to Cloudflare Workers
-
-Authenticate once, rebuild, then deploy the generated Worker configuration:
+Der statische Export liegt unter `dist/client/` (reines HTML/JS/CSS,
+`dist/server/` ist ein Überbleibsel der vinext-Build-Pipeline und wird
+nicht ausgeliefert). Zum lokalen Testen:
 
 ```bash
-npx wrangler login
-npm run build
-npx wrangler deploy --config dist/server/wrangler.json
+python3 -m http.server 8787 --directory dist/client
 ```
 
-Wrangler prints the deployed URL. A custom domain can then be attached in the Cloudflare dashboard.
+Öffne `http://127.0.0.1:8787`.
 
-## Run on a conventional Linux server
+## Deployment
 
-Install and build as above, then run the preview Worker as a persistent service:
+`.github/workflows/deploy.yml` erledigt alles automatisch:
 
-```bash
-npm start -- --port 8787
-```
+- **Push auf `main`** — baut die Seite und deployt sie via
+  `actions/deploy-pages` auf GitHub Pages.
+- **Pull Requests gegen `main`** — läuft nur der Build als Verifikation;
+  deployt wird bewusst nicht, damit ein PR-Stand nie live landet.
 
-Keep that command alive with your process manager and reverse-proxy the public domain to `http://127.0.0.1:8787` with Nginx, Caddy, or an equivalent proxy. The application is not a plain static-site upload: it includes a generated Worker entry point as well as static browser assets.
+Einmalig im Repository einzurichten (unter *Settings → Pages*):
 
-## Files and persistence
+1. Source auf **GitHub Actions** stellen.
+2. Custom Domain `covermaker.allesokai.de` eintragen (oder einfach
+   mergen — die `CNAME`-Datei im Build-Artefakt setzt sie automatisch).
+3. DNS: `CNAME`-Record `covermaker` → `<owner>.github.io`, danach
+   unter *Settings → Pages* „Enforce HTTPS" aktivieren, sobald das
+   Zertifikat ausgestellt ist.
 
-The tool has no backend or database. Presets, draft episode data, and uploaded guest images are stored locally in each browser. Moving the deployment does not migrate that browser-local data to another browser or device.
+## Dateien und Persistenz
+
+Die Dateien `public/CNAME` und die `output: 'export'`-Konfiguration in
+`next.config.ts` sind für Pages erforderlich. Alte Browser-Daten aus der
+Cloudflare-Ära bleiben erhalten — sie liegen im Browser und hängen an
+keinerlei Server-Umgebung.
