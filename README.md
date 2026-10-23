@@ -18,11 +18,11 @@ Live: [covermaker.allesokai.de](https://covermaker.allesokai.de)
 ## Entwicklung
 
 ```bash
-npm install   # Abhängigkeiten installieren
-npm run dev   # Vite-Devserver mit HMR auf http://localhost:5173
-npm run lint  # ESLint
-npm run build # Statischer Export nach dist/client/
-npm start     # Production-Build lokal serven (vite preview)
+npm install      # Abhängigkeiten installieren
+npm start        # Vite-Devserver mit HMR auf http://localhost:5173
+npm run lint     # ESLint
+npm run build    # Statischer Export nach dist/client/
+npm run preview  # Production-Build lokal serven (vite preview)
 ```
 
 Details zu Deployment und DNS: [DEPLOYMENT.md](./DEPLOYMENT.md).
