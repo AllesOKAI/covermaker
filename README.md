@@ -1,7 +1,7 @@
-# Alles OK AI Cover Maker
+# Alles OkAI Cover Maker
 
 Statisches Tool zum Entwerfen deterministischer Podcast-Cover und
-Social-Artwork für [Alles OK AI](https://allesokai.de). Läuft vollständig
+Social-Artwork für [Alles OkAI](https://allesokai.de). Läuft vollständig
 im Browser — es gibt kein Backend; Presets, Drafts und hochgeladene
 Gäste-Bilder liegen lokal im Browser der jeweiligen Besucher:in.
 
@@ -18,7 +18,7 @@ Live: [covermaker.allesokai.de](https://covermaker.allesokai.de)
 ## Entwicklung
 
 ```bash
-npm ci        # Abhängigkeiten installieren (oder: npm run install:ci)
+npm install   # Abhängigkeiten installieren
 npm run dev   # Vite-Devserver mit HMR auf http://localhost:5173
 npm run lint  # ESLint
 npm run build # Statischer Export nach dist/client/

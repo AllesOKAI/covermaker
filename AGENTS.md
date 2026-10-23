@@ -3,7 +3,7 @@
 Richtlinien für AI-Coding-Agents (und Menschen, die schnell wissen
 wollen, wie dieses Projekt tickt).
 
-Der **Alles OK AI Covermaker** ist ein statisches Browser-Tool zum
+Der **Alles OkAI Covermaker** ist ein statisches Browser-Tool zum
 Entwerfen deterministischer Podcast-Cover und Social-Artwork. Es gibt
 **kein Backend**: keine API-Routen, keine Datenbank, kein Auth. Presets,
 Drafts und hochgeladene Gäste-Bilder leben ausschließlich im

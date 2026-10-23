@@ -1,4 +1,4 @@
-# Alles OK AI Cover Maker deployment
+# Alles OkAI Cover Maker deployment
 
 Die App ist eine statische Website und wird über GitHub Pages auf
 [covermaker.allesokai.de](https://covermaker.allesokai.de) gehostet.

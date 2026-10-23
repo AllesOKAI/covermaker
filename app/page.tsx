@@ -314,7 +314,7 @@ export default function Home() {
   const presetOptions = presets.map((item) => ({ value: `${item.id}:${item.version}`, label: `${item.name} · v${item.version}` }));
 
   return <main className="app-shell">
-    <header className="topbar"><div className="brand-lockup"><span className="brand-mark">OK</span><div><strong>Cover Maker</strong><small>Alles OK AI</small></div></div><div className="preset-status"><span className="status-dot" />{preset.name}<b>v{preset.version}</b></div></header>
+    <header className="topbar"><div className="brand-lockup"><span className="brand-mark">OK</span><div><strong>Cover Maker</strong><small>Alles OkAI</small></div></div><div className="preset-status"><span className="status-dot" />{preset.name}<b>v{preset.version}</b></div></header>
     <Tabs defaultValue="artwork" className="workspace-tabs">
       <div className="tabbar"><TabsList className="brand-tabs"><TabsTrigger value="explore">Explore</TabsTrigger><TabsTrigger value="artwork">Artwork</TabsTrigger></TabsList><p>Deterministic in your browser · no uploads</p></div>
       <TabsContent value="explore" className="workspace">
