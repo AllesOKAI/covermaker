@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ImagePlus, Plus, RotateCcw, Save, Sparkles, Trash2, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
@@ -58,7 +58,8 @@ const guestSamples = ["/assets/guests/random-person1.jpeg", "/assets/guests/rand
 
 function normalizePreset(value: SeasonPreset): SeasonPreset {
   const legacyField = value.field as SeasonPreset["field"] & { relief?: number };
-  const { relief: _removedRelief, ...savedField } = legacyField;
+  const savedField: SeasonPreset["field"] & { relief?: number } = { ...legacyField };
+  delete savedField.relief; // Dropped in contour-3.0; kept tolerant for old saved presets.
   return {
     ...initialPreset,
     ...value,
@@ -249,11 +250,15 @@ export default function Home() {
   const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const cleanStoryRef = useRef<SVGSVGElement>(null); const linkedinRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
 
   useEffect(() => {
-    try {
-      const savedPresets = localStorage.getItem(STORAGE_PRESETS); const savedDraft = localStorage.getItem(STORAGE_DRAFT);
-      if (savedPresets) { const parsed = (JSON.parse(savedPresets) as SeasonPreset[]).map(normalizePreset); if (parsed.length) { setPresets(parsed); setPreset(parsed[parsed.length - 1]); } }
-      if (savedDraft) setEpisode(JSON.parse(savedDraft));
-    } catch { /* Safe defaults remain. */ }
+    // startTransition marks the post-hydration state restore as non-urgent so
+    // the prerendered default view paints first without cascading renders.
+    startTransition(() => {
+      try {
+        const savedPresets = localStorage.getItem(STORAGE_PRESETS); const savedDraft = localStorage.getItem(STORAGE_DRAFT);
+        if (savedPresets) { const parsed = (JSON.parse(savedPresets) as SeasonPreset[]).map(normalizePreset); if (parsed.length) { setPresets(parsed); setPreset(parsed[parsed.length - 1]); } }
+        if (savedDraft) setEpisode(JSON.parse(savedDraft));
+      } catch { /* Safe defaults remain. */ }
+    });
     fetch("/assets/logo/allesokai-de-logo.svg").then((response) => response.text()).then((source) => setLogoData(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`)).catch(() => undefined);
   }, []);
   useEffect(() => { try { localStorage.setItem(STORAGE_DRAFT, JSON.stringify(episode)); } catch { /* best effort */ } }, [episode]);
@@ -340,7 +345,7 @@ export default function Home() {
         <aside className="control-panel">
           <div className="panel-heading"><div><span className="eyebrow">Episode production</span><h1>Compose artwork</h1></div><ImagePlus size={20} /></div>
           <section className="control-section"><div className="section-title"><span>01</span><h2>Episode</h2></div><div className="two-fields"><label className="field-control"><span>Number</span><Input type="number" min={0} max={9999} value={episode.number} onChange={(event) => setEpisodeField("number", Number(event.target.value))} /></label><label className="field-control"><span>Accent</span><span className="color-input"><input type="color" value={episode.accent} onChange={(event) => setEpisodeField("accent", event.target.value.toUpperCase())} /><code>{episode.accent}</code></span></label></div><label className="field-control"><span>Title <em>{episode.title.length}/72</em></span><textarea rows={3} value={episode.title} onChange={(event) => setEpisodeField("title", event.target.value)} /></label>{titleFit.overflow && <div className="warning">The square title exceeds the safe three-line box. Shorten it before final export.</div>}<label className="field-control"><span>Subtitle <em>optional</em></span><Input value={episode.subtitle} onChange={(event) => setEpisodeField("subtitle", event.target.value)} placeholder="with / featuring…" /></label><label className="field-control"><span>Type tag <em>optional</em></span><Input value={episode.tag} onChange={(event) => setEpisodeField("tag", event.target.value)} placeholder="Interview" /></label><label className="field-control"><span>Seed override <em>optional</em></span><Input value={episode.seedOverride} onChange={(event) => setEpisodeField("seedOverride", event.target.value)} placeholder="Uses episode number + title" /></label><p className="field-note">Title changes create a new pattern unless you freeze the identity with a seed override.</p></section>
-          <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}><img src={person.image} alt="" /><div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
+          <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}>{/* eslint-disable @next/next/no-img-element -- src is a static path or a user-upload data URL, which next/image cannot optimize */}<img src={person.image} alt="" />{/* eslint-enable @next/next/no-img-element */}<div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>
         <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, four compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div><div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; the tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
