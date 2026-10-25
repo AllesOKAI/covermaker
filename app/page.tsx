@@ -171,25 +171,87 @@ function Pattern({ preset, seedKey, width, height, clipId, accent }: { preset: S
   </g>;
 }
 
-type ArtworkFormat = "square" | "story" | "story-clean" | "linkedin";
+function wrapTextToWidth(text: string, maxWidth: number, measure: (value: string) => number) {
+  const lines: string[] = [];
+  for (const paragraph of text.trim().split(/\r?\n/)) {
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (measure(next) <= maxWidth) { line = next; continue; }
+      if (line) { lines.push(line); line = ""; }
+      // Break unusually long words as well, so they stay within the safe area.
+      for (const character of Array.from(word)) {
+        if (line && measure(line + character) > maxWidth) { lines.push(line); line = ""; }
+        line += character;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function YouTubeText({ title, subtitle, width, margin, titleSize, titleY, lineHeight }: { title: string; subtitle: string; width: number; margin: number; titleSize: number; titleY: number; lineHeight: number }) {
+  const maxWidth = width - margin * 2;
+  const subtitleSize = 36 * 1.5; const subtitleLineHeight = subtitleSize * 1.2;
+  const key = JSON.stringify([title, subtitle, titleSize, maxWidth]);
+  const [measured, setMeasured] = useState<{ key: string; title: string[]; subtitle: string[] } | null>(null);
+  const lines = measured?.key === key ? measured : {
+    title: wrapTextToWidth(title, maxWidth, (value) => value.length * titleSize * 0.65),
+    subtitle: wrapTextToWidth(subtitle, maxWidth, (value) => value.length * subtitleSize * 0.65),
+  };
+
+  useEffect(() => {
+    let active = true;
+    async function measureText() {
+      await Promise.all([
+        document.fonts.load(`900 ${titleSize}px SpockEssBlack`, title),
+        document.fonts.load(`500 ${subtitleSize}px SpockEss`, subtitle),
+      ]);
+      const context = document.createElement("canvas").getContext("2d");
+      if (!active || !context) return;
+      context.font = `900 ${titleSize}px SpockEssBlack`;
+      const titleLines = wrapTextToWidth(title, maxWidth - 2, (value) => context.measureText(value).width - Math.max(0, Array.from(value).length - 1) * 2.5);
+      context.font = `500 ${subtitleSize}px SpockEss`;
+      const subtitleLines = wrapTextToWidth(subtitle, maxWidth - 2, (value) => context.measureText(value).width);
+      setMeasured({ key, title: titleLines, subtitle: subtitleLines });
+    }
+    void measureText();
+    return () => { active = false; };
+  }, [key, title, subtitle, titleSize, subtitleSize, maxWidth]);
+
+  const x = width - margin;
+  return <>
+    <text x={x} y={titleY} textAnchor="end" fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
+      {lines.title.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
+    </text>
+    {subtitle && <text x={x} y={titleY + Math.max(0, lines.title.length - 1) * lineHeight + 90} textAnchor="end" fontFamily="SpockEss" fontWeight="500" fontSize={subtitleSize} fill={PURPLE} stroke={PURPLE} strokeWidth="0.6" paintOrder="stroke">
+      {lines.subtitle.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? 0 : subtitleLineHeight}>{line}</tspan>)}
+    </text>}
+  </>;
+}
+
+type ArtworkFormat = "square" | "story" | "story-clean" | "linkedin" | "youtube";
 type CoverProps = { episode: Episode; preset: SeasonPreset; format: ArtworkFormat; logoData: string; svgRef?: React.RefObject<SVGSVGElement | null> };
 function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
-  const square = format === "square"; const linkedin = format === "linkedin"; const coverLayout = square || linkedin; const cleanStory = format === "story-clean";
-  const width = linkedin ? 1914 : square ? 1000 : 1080; const height = coverLayout ? 1000 : 1920;
+  const square = format === "square"; const linkedin = format === "linkedin"; const youtube = format === "youtube"; const coverLayout = square || linkedin || youtube; const cleanStory = format === "story-clean";
+  const width = youtube ? 1920 : linkedin ? 1914 : square ? 1000 : 1080; const height = youtube ? 1080 : coverLayout ? 1000 : 1920;
   const seedKey = episodeSeed(episode, preset, "shared-pattern"); const clipId = `field-${format}-${hashString(seedKey)}`;
   const title = wrapTitle(episode.title, linkedin ? 32 : square ? 19 : 18, coverLayout ? 3 : 5); const people = cleanStory ? [] : episode.people.slice(0, 3);
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
-  const portraitSize = coverLayout ? 158 : 210; const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = coverLayout ? 104 : 62;
-  const portraitY = coverLayout ? 708 : 1450; const titleX = coverLayout ? 112 : 92; const titleY = coverLayout ? 320 : 385;
-  const lineHeight = coverLayout ? 88 : 118; const titleSize = coverLayout ? (episode.title.length > 48 ? 68 : 78) : episode.title.length > 48 ? 90 : 102;
-  const field = linkedin ? { x: 22, y: 23, w: 1870, h: 760, r: 56 } : square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: cleanStory ? 1633 : 1545, r: 72 };
-  const formatLabel = linkedin ? "LinkedIn" : cleanStory ? "Portrait-free 9 by 16" : square ? "Square" : "9 by 16";
+  const portraitScale = youtube ? 2.1 : 1; const portraitSize = (coverLayout ? 158 : 210) * portraitScale; const portraitRing = 8 * portraitScale;
+  const portraitGap = -Math.round(portraitSize * 0.12); const portraitStart = coverLayout ? 104 : 62;
+  const portraitY = youtube ? height - (1000 - 708 - 158) - portraitSize : coverLayout ? 708 : 1450; const titleX = coverLayout ? 112 : 92; const titleY = coverLayout ? 320 : 385;
+  const lineHeight = coverLayout ? 88 * (youtube ? 1.15 : 1) : 118; const titleSize = coverLayout ? (episode.title.length > 48 ? 68 : 78) * (youtube ? 1.15 : 1) : episode.title.length > 48 ? 90 : 102;
+  const field = youtube ? { x: 22, y: 23, w: width - 44, h: height - 240, r: 56 } : linkedin ? { x: 22, y: 23, w: 1870, h: 760, r: 56 } : square ? { x: 22, y: 23, w: 956, h: 760, r: 56 } : { x: 40, y: 42, w: 1000, h: cleanStory ? 1633 : 1545, r: 72 };
+  const formatLabel = youtube ? "YouTube" : linkedin ? "LinkedIn" : cleanStory ? "Portrait-free 9 by 16" : square ? "Square" : "9 by 16";
+  const logoScale = youtube ? 0.77 : 1;
+  const logoX = width - 360 * logoScale; const logoY = height - 380 * logoScale;
 
   return <svg ref={svgRef} className={`cover-svg cover-svg--${format}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${formatLabel} cover preview for episode ${episodeLabel}`} xmlns="http://www.w3.org/2000/svg">
     <defs>
       <clipPath id={clipId}><rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.r} /></clipPath>
-      {people.map((person, index) => <clipPath key={person.id} id={`portrait-${format}-${person.id}`}><circle cx={portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2} cy={portraitY + portraitSize / 2} r={portraitSize / 2 - 8} /></clipPath>)}
+      {people.map((person, index) => <clipPath key={person.id} id={`portrait-${format}-${person.id}`}><circle cx={portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2} cy={portraitY + portraitSize / 2} r={portraitSize / 2 - portraitRing} /></clipPath>)}
     </defs>
     <rect width={width} height={height} fill={PURPLE} />
     <rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.r} fill={episode.accent} />
@@ -197,19 +259,21 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
     <path d={coverLayout ? "M0 0H450V78Q450 126 402 126H0Z" : "M0 0H650V108Q650 180 578 180H0Z"} fill={PURPLE} />
     <text x={coverLayout ? 45 : 62} y={coverLayout ? 86 : 123} fontFamily="SpockPro" fontSize={coverLayout ? 52 : 72} letterSpacing="1" fill={episode.accent}>EPISODE</text>
     <text x={coverLayout ? 292 : 402} y={coverLayout ? 86 : 123} fontFamily="SpockPro" fontWeight="700" fontSize={coverLayout ? 54 : 76} fill="#FFFFFF">{episodeLabel}</text>
-    <text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
+    {youtube ? <YouTubeText title={episode.title} subtitle={episode.subtitle} width={width} margin={titleX} titleSize={titleSize} titleY={titleY} lineHeight={lineHeight} /> : <><text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
       {title.lines.map((line, index) => <tspan key={line + index} x={titleX} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
     </text>
-    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (coverLayout ? 90 : 132)} fontFamily="SpockEss" fontSize={coverLayout ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}
+    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (coverLayout ? 90 : 132)} fontFamily="SpockEss" fontSize={coverLayout ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}</>}
     {people.map((person, index) => {
       const cx = portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2; const cy = portraitY + portraitSize / 2;
-      return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + 8} y={cy - portraitSize / 2 + 8} width={portraitSize - 16} height={portraitSize - 16} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
+      return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + portraitRing} y={cy - portraitSize / 2 + portraitRing} width={portraitSize - portraitRing * 2} height={portraitSize - portraitRing * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
     })}
     {coverLayout ? <>
-      {linkedin ? <path d="M1606 620H1914V1000H1554V672Q1554 620 1606 620Z" fill="#FFFFFF" /> : <path d="M692 620H1000V1000H640V672Q640 620 692 620Z" fill="#FFFFFF" />}
-      <image href={logoHref} x={linkedin ? 1629 : 715} y="672" width="216" height="216" />
-      <text x={linkedin ? 1600 : 686} y="966" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
-      {episode.tag && <text x="112" y="928" fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
+      <g transform={`translate(${logoX} ${logoY}) scale(${logoScale})`}>
+        <path d="M52 0H360V380H0V52Q0 0 52 0Z" fill="#FFFFFF" />
+        <image href={logoHref} x="75" y="52" width="216" height="216" />
+        <text x="46" y="346" fontFamily="SpockPro" fontWeight="700" fontSize="46" fill={PURPLE}>allesokai.de</text>
+      </g>
+      {episode.tag && <text x="112" y={height - 72} fontFamily="SpockEss" fontWeight="700" fontSize="39" fill={episode.accent}>{episode.tag}</text>}
     </> : <>
       <path d="M795 1507H1080V1920H741V1561Q741 1507 795 1507Z" fill="#FFFFFF" />
       <image href={logoHref} x="791" y="1554" width="242" height="242" />
@@ -230,7 +294,10 @@ function SelectControl({ label, value, onChange, options }: { label: string; val
 async function blobToDataUrl(blob: Blob) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); }); }
 async function fetchAsDataUrl(url: string) { const response = await fetch(url); if (!response.ok) throw new Error(`Could not load ${url}`); return blobToDataUrl(await response.blob()); }
 async function exportCover(svg: SVGSVGElement, width: number, height: number, filename: string) {
-  await document.fonts.ready; const clone = svg.cloneNode(true) as SVGSVGElement; const images = Array.from(clone.querySelectorAll("image"));
+  await document.fonts.ready;
+  // Let text wrapping commit after the fonts have loaded before cloning the SVG.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const clone = svg.cloneNode(true) as SVGSVGElement; const images = Array.from(clone.querySelectorAll("image"));
   await Promise.all(images.map(async (node) => { const href = node.getAttribute("href") || ""; if (href.startsWith("/")) node.setAttribute("href", await fetchAsDataUrl(href)); }));
   const [regular, bold, essentials, black] = await Promise.all([fetchAsDataUrl("/assets/fonts/SpockPro-Regular.woff2"), fetchAsDataUrl("/assets/fonts/SpockPro-Bold.woff2"), fetchAsDataUrl("/assets/fonts/SpockEssAlt1-Regular.woff2"), fetchAsDataUrl("/assets/fonts/SpockEssAlt2-Black.woff2")]);
   const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
@@ -247,7 +314,7 @@ async function exportCover(svg: SVGSVGElement, width: number, height: number, fi
 export default function Home() {
   const [presets, setPresets] = useState<SeasonPreset[]>([initialPreset]); const [preset, setPreset] = useState<SeasonPreset>(initialPreset);
   const [episode, setEpisode] = useState<Episode>(initialEpisode); const [exploreSeed, setExploreSeed] = useState(215); const [logoData, setLogoData] = useState(""); const [notice, setNotice] = useState("");
-  const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const cleanStoryRef = useRef<SVGSVGElement>(null); const linkedinRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
+  const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const cleanStoryRef = useRef<SVGSVGElement>(null); const linkedinRef = useRef<SVGSVGElement>(null); const youtubeRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
 
   useEffect(() => {
     // startTransition marks the post-hydration state restore as non-urgent so
@@ -302,6 +369,7 @@ export default function Home() {
       story: { ref: storyRef, width: 1080, height: 1920, label: "1080 × 1920" },
       "story-clean": { ref: cleanStoryRef, width: 1080, height: 1920, label: "1080 × 1920" },
       linkedin: { ref: linkedinRef, width: 1200, height: 627, label: "1200 × 627" },
+      youtube: { ref: youtubeRef, width: 1920, height: 1080, label: "1920 × 1080" },
     } as const;
     const target = targets[format]; const svg = target.ref.current; if (!svg) return; setNotice(`Rendering ${target.label} PNG…`);
     try {
@@ -348,7 +416,7 @@ export default function Home() {
           <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}>{/* eslint-disable @next/next/no-img-element -- src is a static path or a user-upload data URL, which next/image cannot optimize */}<img src={person.image} alt="" />{/* eslint-enable @next/next/no-img-element */}<div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>
-        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, four compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div><div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; the tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
+        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, five compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div><div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article><article className="artboard-card artboard-card--youtube"><div className="artboard-label"><span>YouTube</span><small>1920 × 1080 PNG · 16:9</small></div><div className="artboard"><CoverArt svgRef={youtubeRef} episode={episode} preset={preset} format="youtube" logoData={logoData} /></div><Button onClick={() => doExport("youtube")}><Download /> Export YouTube</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; YouTube approximates Medium with a light outline. The tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
       </TabsContent>
     </Tabs>
     {notice && <div className="toast" role="status">{notice}</div>}
