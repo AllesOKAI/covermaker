@@ -8,16 +8,19 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: deploy-production
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v7
 
@@ -31,17 +34,25 @@ jobs:
       - name: Build
         run: npm run build
 
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: ./dist/client
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # Deploy nur bei echten Pushes auf main außer bei Fork-PRs —
+      # und übersprungen, wenn die Secrets fehlen (z. B. in Forks).
+      - name: Deploy via rsync
+        run: |
+          set -x
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_PRIVATE_KEY" ]; then
+            echo "Deploy-Secrets fehlen — überspringe Deployment."
+            exit 0
+          fi
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printenv DEPLOY_SSH_PRIVATE_KEY > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keyscan -p "$SSH_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>&1; then
+            echo "ssh-keyscan fehlgeschlagen: VPS unter '$DEPLOY_HOST' nicht auf Port $SSH_PORT erreichbar."
+            echo "Pruefen: laeuft sshd auf diesem Port? ufw/Provider-Firewall? DNS-Record korrekt?"
+            exit 1
+          fi
+          rsync -az --delete \
+            -e "ssh -p $SSH_PORT -i ~/.ssh/deploy_key -o BatchMode=yes -o IdentitiesOnly=yes" \
+            dist/client/ \
+            "$DEPLOY_USER@$DEPLOY_HOST:/var/www/covermaker.allesokai.de/"
