@@ -13,6 +13,7 @@ import { prepareGuestImage } from "@/lib/browser-storage";
 import { useCoverDraft } from "@/lib/use-cover-draft";
 import { validateArtwork } from "@/lib/artwork-layout";
 import type { ArtworkFormat as LayoutFormat, MeasureText as LayoutMeasure } from "@/lib/artwork-layout";
+import { createResourceCache, exportAllFormats, exportArtwork } from "@/lib/artwork-export";
 
 function hashString(value: string) {
   let hash = 2166136261;
@@ -233,26 +234,6 @@ function SelectControl({ label, value, onChange, options }: { label: string; val
   return <label className="field-control"><span>{label}</span><Select value={value} onValueChange={onChange}><SelectTrigger className="brand-select"><SelectValue /></SelectTrigger><SelectContent>{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></label>;
 }
 
-async function blobToDataUrl(blob: Blob) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); }); }
-async function fetchAsDataUrl(url: string) { const response = await fetch(url); if (!response.ok) throw new Error(`Could not load ${url}`); return blobToDataUrl(await response.blob()); }
-async function exportCover(svg: SVGSVGElement, width: number, height: number, filename: string) {
-  await document.fonts.ready;
-  // Let text wrapping commit after the fonts have loaded before cloning the SVG.
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  const clone = svg.cloneNode(true) as SVGSVGElement; const images = Array.from(clone.querySelectorAll("image"));
-  await Promise.all(images.map(async (node) => { const href = node.getAttribute("href") || ""; if (href.startsWith("/")) node.setAttribute("href", await fetchAsDataUrl(href)); }));
-  const [regular, bold, essentials, black] = await Promise.all([fetchAsDataUrl("/assets/fonts/SpockPro-Regular.woff2"), fetchAsDataUrl("/assets/fonts/SpockPro-Bold.woff2"), fetchAsDataUrl("/assets/fonts/SpockEssAlt1-Regular.woff2"), fetchAsDataUrl("/assets/fonts/SpockEssAlt2-Black.woff2")]);
-  const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
-  style.textContent = `@font-face{font-family:SpockPro;src:url(${regular})} @font-face{font-family:SpockPro;src:url(${bold});font-weight:700} @font-face{font-family:SpockEss;src:url(${essentials})} @font-face{font-family:SpockEssBlack;src:url(${black});font-weight:900}`;
-  clone.prepend(style); clone.setAttribute("width", String(width)); clone.setAttribute("height", String(height));
-  const source = new XMLSerializer().serializeToString(clone); const objectUrl = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" })); const image = new Image(); image.decoding = "sync";
-  await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = reject; image.src = objectUrl; });
-  const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height; const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas unavailable");
-  context.drawImage(image, 0, 0, width, height); URL.revokeObjectURL(objectUrl); const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png")); if (!png) throw new Error("PNG export failed");
-  const downloadUrl = URL.createObjectURL(png); const link = document.createElement("a"); link.href = downloadUrl; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-  return { width: canvas.width, height: canvas.height, bytes: png.size };
-}
-
 export default function Home() {
   const [exploreSeed, setExploreSeed] = useState(215);
   const [logoData, setLogoData] = useState("");
@@ -336,19 +317,52 @@ export default function Home() {
       showNotice("Guest photo prepared and stored locally.");
     } catch (error) { showNotice(error instanceof Error ? error.message : "Das Bild konnte nicht geladen werden."); }
   };
+  const exportCache = useMemo(() => createResourceCache(async (url: string) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Could not load ${url}`);
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }), []);
+  const [exportingFormat, setExportingFormat] = useState<ArtworkFormat | "all" | null>(null);
+  const exportTargets = () => ({
+    square: { svg: squareRef.current, width: 3000, height: 3000, label: "Square" },
+    story: { svg: storyRef.current, width: 1080, height: 1920, label: "Story 9:16" },
+    "story-clean": { svg: cleanStoryRef.current, width: 1080, height: 1920, label: "Story clean 9:16" },
+    linkedin: { svg: linkedinRef.current, width: 1200, height: 627, label: "LinkedIn" },
+    youtube: { svg: youtubeRef.current, width: 1920, height: 1080, label: "YouTube" },
+  });
+  const exportFilename = (format: ArtworkFormat) => `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`;
   const doExport = async (format: ArtworkFormat) => {
-    const targets = {
-      square: { ref: squareRef, width: 3000, height: 3000, label: "3000 × 3000" },
-      story: { ref: storyRef, width: 1080, height: 1920, label: "1080 × 1920" },
-      "story-clean": { ref: cleanStoryRef, width: 1080, height: 1920, label: "1080 × 1920" },
-      linkedin: { ref: linkedinRef, width: 1200, height: 627, label: "1200 × 627" },
-      youtube: { ref: youtubeRef, width: 1920, height: 1080, label: "1920 × 1080" },
-    } as const;
-    const target = targets[format]; const svg = target.ref.current; if (!svg) return; showNotice("Rendering " + target.label + " PNG…");
+    if (exportingFormat) return;
+    const targets = exportTargets();
+    const target = targets[format];
+    setExportingFormat(format);
+    showNotice(`Rendering ${target.label} PNG…`);
     try {
-      const result = await exportCover(svg, target.width, target.height, "allesokai-ep" + String(episode.number).padStart(3, "0") + "-" + format + "-preset-v" + preset.version + ".png");
-      showNotice("PNG ready · " + result.width + " × " + result.height + " · " + Math.round(result.bytes / 1024) + " KB");
-    } catch { showNotice("Export failed — please try again"); }
+      const outcome = await exportArtwork(target.svg, target.width, target.height, exportFilename(format), exportCache);
+      if (outcome.ok) showNotice(`PNG ready · ${outcome.result.width} × ${outcome.result.height} · ${Math.round(outcome.result.bytes / 1024)} KB`);
+      else showNotice(outcome.message);
+    } finally { setExportingFormat(null); }
+  };
+  const doExportAll = async () => {
+    if (exportingFormat) return;
+    const targets = exportTargets();
+    setExportingFormat("all");
+    showNotice("Rendering all five formats…");
+    try {
+      const results = await exportAllFormats(
+        (Object.keys(targets) as ArtworkFormat[]).map((format) => ({ ...targets[format], filename: exportFilename(format) })),
+        exportCache,
+      );
+      const failed = results.filter((entry) => !entry.outcome.ok);
+      if (!failed.length) showNotice(`All ${results.length} PNGs exported`);
+      else showNotice(`${results.length - failed.length}/${results.length} exports succeeded — failed: ${failed.map((entry) => entry.label).join(", ")}`);
+    } finally { setExportingFormat(null); }
   };
   const sampleEpisode: Episode = { ...initialEpisode, number: exploreSeed, title: "Ein Signal. Viele mögliche Formen.", subtitle: "Season instrument preview", tag: preset.field.mode === "lines" ? "Line study" : "Dot study", accent: LIME, seedOverride: `explore-${exploreSeed}`, people: initialEpisode.people };
   const presetOptions = presets.map((item) => ({ value: `${item.id}:${item.version}`, label: `${item.name} · v${item.version}` }));
@@ -388,7 +402,7 @@ export default function Home() {
           <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}>{/* eslint-disable @next/next/no-img-element -- src is a static path or a user-upload data URL, which next/image cannot optimize */}<img src={person.image} alt="" />{/* eslint-enable @next/next/no-img-element */}<div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>
-        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, five compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div>{formatWarnings("square").length > 0 && <ul className="artboard-warnings">{formatWarnings("square").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div>{formatWarnings("story").length > 0 && <ul className="artboard-warnings">{formatWarnings("story").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div>{formatWarnings("story-clean").length > 0 && <ul className="artboard-warnings">{formatWarnings("story-clean").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div>{formatWarnings("linkedin").length > 0 && <ul className="artboard-warnings">{formatWarnings("linkedin").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article><article className="artboard-card artboard-card--youtube"><div className="artboard-label"><span>YouTube</span><small>1920 × 1080 PNG · 16:9</small></div>{formatWarnings("youtube").length > 0 && <ul className="artboard-warnings">{formatWarnings("youtube").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={youtubeRef} episode={episode} preset={preset} format="youtube" logoData={logoData} /></div><Button onClick={() => doExport("youtube")}><Download /> Export YouTube</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; YouTube approximates Medium with a light outline. The tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
+        <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, five compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div>{formatWarnings("square").length > 0 && <ul className="artboard-warnings">{formatWarnings("square").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")} disabled={exportingFormat !== null}>{exportingFormat === "square" ? "Rendering…" : ""}<Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div>{formatWarnings("story").length > 0 && <ul className="artboard-warnings">{formatWarnings("story").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")} disabled={exportingFormat !== null}>{exportingFormat === "story" ? "Rendering…" : ""}<Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div>{formatWarnings("story-clean").length > 0 && <ul className="artboard-warnings">{formatWarnings("story-clean").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")} disabled={exportingFormat !== null}>{exportingFormat === "story-clean" ? "Rendering…" : ""}<Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div>{formatWarnings("linkedin").length > 0 && <ul className="artboard-warnings">{formatWarnings("linkedin").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")} disabled={exportingFormat !== null}>{exportingFormat === "linkedin" ? "Rendering…" : ""}<Download /> Export LinkedIn</Button></article><article className="artboard-card artboard-card--youtube"><div className="artboard-label"><span>YouTube</span><small>1920 × 1080 PNG · 16:9</small></div>{formatWarnings("youtube").length > 0 && <ul className="artboard-warnings">{formatWarnings("youtube").map((warning) => <li key={warning}>{warning}</li>)}</ul>}<div className="artboard"><CoverArt svgRef={youtubeRef} episode={episode} preset={preset} format="youtube" logoData={logoData} /></div><Button onClick={() => doExport("youtube")} disabled={exportingFormat !== null}>{exportingFormat === "youtube" ? "Rendering…" : ""}<Download /> Export YouTube</Button></article></div><div className="export-all"><Button onClick={doExportAll} disabled={exportingFormat !== null}>{exportingFormat === "all" ? "Rendering all…" : "Export all five formats"}</Button></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; YouTube approximates Medium with a light outline. The tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
       </TabsContent>
     </Tabs>
     <p className={`save-status ${saveStatus.includes("nicht") || saveStatus.includes("voll") ? "save-status--error" : ""}`} role="status">{saveStatus}</p>
