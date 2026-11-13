@@ -3,6 +3,8 @@ import { initialEpisode, initialPreset } from "./artwork.ts";
 import type { Draft, Episode, SeasonPreset } from "./artwork.ts";
 import { loadDraft, loadStoredPresets, nextPresetVersion, queueDraftSave, saveDraft, savePresets } from "./browser-storage.ts";
 import type { SaveResult } from "./browser-storage.ts";
+import { applyQueryToEpisode, readEpisodeQuery } from "./postprod-handoff.ts";
+import type { EpisodeUpdate } from "./postprod-handoff.ts";
 
 export type SavePresetResult = { status: string; presetId: string; version: number } | SaveResult;
 
@@ -12,6 +14,7 @@ export function useCoverDraft(onNotice: (message: string) => void) {
   const [presets, setPresets] = useState<SeasonPreset[]>([initialPreset]);
   const [saveStatus, setSaveStatus] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [queryApplied, setQueryApplied] = useState<EpisodeUpdate | null>(null);
   const draftRef = useRef<Draft>({ episode: initialEpisode, preset: initialPreset });
   const presetsRef = useRef<SeasonPreset[]>([initialPreset]);
   const versionRef = useRef(0);
@@ -26,17 +29,20 @@ export function useCoverDraft(onNotice: (message: string) => void) {
     const available = stored.some((item) => item.id === restored.preset.id && item.version === restored.preset.version)
       ? stored
       : [...stored, restored.preset];
+    const queryUpdate = readEpisodeQuery(new URLSearchParams(window.location.search));
+    const restoredEpisode = Object.keys(queryUpdate).length ? applyQueryToEpisode(restored.episode, queryUpdate) : restored.episode;
     startTransition(() => {
       // A user who typed before hydration finished owns the session: never
       // overwrite their edits with the restored draft.
       if (!userEdited.current) {
-        draftRef.current = { episode: restored.episode, preset: restored.preset };
-        setEpisode(restored.episode);
+        draftRef.current = { episode: restoredEpisode, preset: restored.preset };
+        setEpisode(restoredEpisode);
         setPreset(restored.preset);
       }
       presetsRef.current = available;
       setPresets(available);
       setHydrated(true);
+      setQueryApplied(Object.keys(queryUpdate).length ? queryUpdate : null);
     });
     if (restored.warning) noticeRef.current(restored.warning);
   }, []);
@@ -89,5 +95,5 @@ export function useCoverDraft(onNotice: (message: string) => void) {
     }
   };
 
-  return { episode, setEpisode, setEpisodeField, preset, setPreset, presets, updatePreset, selectPreset, savePresetVersion, saveStatus };
+  return { episode, setEpisode, setEpisodeField, preset, setPreset, presets, updatePreset, selectPreset, savePresetVersion, saveStatus, queryApplied };
 }

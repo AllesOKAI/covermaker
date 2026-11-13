@@ -8,6 +8,27 @@ Gäste-Bilder liegen lokal im Browser der jeweiligen Besucher:in.
 Live: [covermaker.allesokai.de](https://covermaker.allesokai.de)
 (gehostet auf einem eigenen VPS mit Caddy und Basic Auth).
 
+## Post-Production-Handoff
+
+Episodendaten lassen sich per Query-Parameter vorausfüllen:
+
+```
+https://covermaker.allesokai.de/?ep=217&titel=Wenn%20Maschinen%20mitdenken
+```
+
+Unter den Artboards erzeugt der Covermaker daraus einen kopierbaren
+Befehl für das Post-Production-Skript ([../postprod](../postprod)):
+
+```sh
+./postprod.sh 217 /pfad/zum/video.mp4 --titel 'Wenn Maschinen mitdenken' \
+  --cover /pfad/zum/downloads/allesokai-ep217-square-preset-v2.png
+```
+
+Das quadratische Cover (3000 × 3000 PNG) wird so per `--cover` in die
+Podcast-MP3 eingebettet. Query-Parameter überschreiben beim Laden nur
+die angegebenen Felder; ohne Parameter bleibt der gespeicherte Entwurf
+unverändert.
+
 ## Stack
 
 - **Next.js-API auf Vite** ([vinext](https://github.com/cloudflare/vinext))
