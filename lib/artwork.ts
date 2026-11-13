@@ -47,15 +47,15 @@ export const initialEpisode: Episode = {
   number: 216, title: "Wenn Maschinen plötzlich mitdenken",
   subtitle: "mit einem Blick hinter die Modelle", tag: "Interview", accent: LIME, seedOverride: "",
   people: [
-    { id: "dennis", name: "Dennis", role: "host", image: "/assets/hosts/dennis.jpg" },
-    { id: "jan", name: "Jan", role: "host", image: "/assets/hosts/jan.jpg" },
+    { id: "dennis", name: "Dennis", role: "host", image: "/assets/hosts/dennis.webp" },
+    { id: "jan", name: "Jan", role: "host", image: "/assets/hosts/jan.webp" },
   ],
 };
 
 export const guestSamples = [
-  "/assets/guests/random-person1.jpeg",
-  "/assets/guests/random-person2.jpeg",
-  "/assets/guests/random-person3.jpeg",
+  "/assets/guests/random-person1.webp",
+  "/assets/guests/random-person2.webp",
+  "/assets/guests/random-person3.webp",
 ];
 
 export function normalizePreset(value: unknown): SeasonPreset | null {
@@ -107,7 +107,12 @@ export function normalizeEpisode(value: unknown): Episode | null {
     if (typeof person.image !== "string" || person.image.length > 8_000_000) return null;
     if (!(person.image.startsWith("/assets/") || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(person.image))) return null;
     ids.add(person.id);
-    people.push({ id: person.id, name: person.name, role: person.role, image: person.image });
+    // Migrate pre-webp asset paths so old drafts keep rendering after the
+    // .jpg/.jpeg originals were replaced by .webp files.
+    const image = person.image
+      .replace(/^\/assets\/hosts\/(dennis|jan)\.jpg$/, "/assets/hosts/$1.webp")
+      .replace(/^\/assets\/guests\/(random-person[123])\.jpeg$/, "/assets/guests/$1.webp");
+    people.push({ id: person.id, name: person.name, role: person.role, image });
   }
   return {
     number: Number(candidate.number), title: candidate.title, subtitle: candidate.subtitle,
