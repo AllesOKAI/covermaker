@@ -99,6 +99,10 @@ button, input, textarea { font: inherit; } button { cursor: pointer; }
 .artboard-card--story .artboard { width: min(100%, 340px); margin: 0 auto; } .artboard-card--linkedin, .artboard-card--youtube { grid-column: 1 / -1; } .artboard-card > button { width: 100%; margin-top: 12px; background: #29022f; }
 .fallback-note { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; margin-top: 30px; padding: 14px 16px; border: 1px solid #d6d0d7; border-radius: 9px; background: rgba(255,255,255,.68); color: #776b79; font-size: 12px; line-height: 1.45; }
 .fallback-note strong { color: #29022f; white-space: nowrap; }
+.save-status { position: fixed; right: 24px; bottom: 24px; z-index: 99; max-width: min(450px, calc(100vw - 32px)); margin: 0; padding: 8px 12px; border: 1px solid #d6d0d7; border-radius: 8px; background: rgba(255,255,255,.94); color: #675b69; font-size: 12px; box-shadow: 0 8px 25px rgba(41,2,47,.08); }
+.save-status:empty { display: none; }
+.save-status--error { border-color: #c73232; background: #fff3f2; color: #8c2727; }
+.save-status:not(:empty) + .toast { bottom: 76px; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 100; padding: 12px 16px; border-radius: 8px; background: #29022f; color: white; box-shadow: 0 14px 40px rgba(41,2,47,.28); font-size: 14px; }
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; } .control-panel { height: auto; max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid #d6d0d7; }

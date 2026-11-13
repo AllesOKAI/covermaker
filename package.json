@@ -10,7 +10,8 @@
     "start": "vite",
     "build": "vinext build",
     "preview": "vite preview --host 127.0.0.1 --port 8787 --strictPort",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",
@@ -23,6 +24,7 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",

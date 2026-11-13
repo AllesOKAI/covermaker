@@ -1,75 +1,16 @@
 "use client";
 
-import React, { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ImagePlus, Plus, RotateCcw, Save, Sparkles, Trash2, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type Wave = "sine" | "triangle" | "saw";
-type RenderMode = "lines" | "dots";
-type WidthCurve = "linear" | "ease-in" | "ease-out";
-type Person = { id: string; name: string; role: "host" | "guest"; image: string };
-type SeasonPreset = {
-  id: string; name: string; version: number; generatorVersion: string;
-  carrier: { wave: Wave; frequency: number; amplitude: number };
-  modulator: { wave: Wave; ratio: number; depth: number; phase: number };
-  field: {
-    lineCount: number; rotation: number; warp: number; mode: RenderMode;
-    firstWidth: number; lastWidth: number; widthCurve: WidthCurve;
-    dotDensity: number; depthTint: number; perspective: number; phaseSpread: number;
-  };
-  variation: { phase: number; ratio: number; warp: number };
-};
-type Episode = {
-  number: number; title: string; subtitle: string; tag: string; accent: string;
-  people: Person[]; seedOverride: string;
-};
-
-const PURPLE = "#29022F";
-const LIME = "#94F20D";
-const STORAGE_PRESETS = "allesokai-cover-presets-v4";
-const STORAGE_DRAFT = "allesokai-cover-draft-v4";
-
-const initialPreset: SeasonPreset = {
-  id: "season-01", name: "Season 01 / Contour Field", version: 2, generatorVersion: "contour-3.0",
-  carrier: { wave: "triangle", frequency: 1.55, amplitude: 0.055 },
-  modulator: { wave: "sine", ratio: 1.3, depth: 0.26, phase: 0.31 },
-  field: {
-    lineCount: 49, rotation: 4, warp: 0.21, mode: "lines",
-    firstWidth: 2, lastWidth: 9.5, widthCurve: "ease-in",
-    dotDensity: 56, depthTint: 0.72, perspective: 0.73, phaseSpread: 0.42,
-  },
-  variation: { phase: 0.45, ratio: 0.2, warp: 0.12 },
-};
-
-const initialEpisode: Episode = {
-  number: 216, title: "Wenn Maschinen plötzlich mitdenken",
-  subtitle: "mit einem Blick hinter die Modelle", tag: "Interview", accent: LIME, seedOverride: "",
-  people: [
-    { id: "dennis", name: "Dennis", role: "host", image: "/assets/hosts/dennis.jpg" },
-    { id: "jan", name: "Jan", role: "host", image: "/assets/hosts/jan.jpg" },
-  ],
-};
-
-const guestSamples = ["/assets/guests/random-person1.jpeg", "/assets/guests/random-person2.jpeg", "/assets/guests/random-person3.jpeg"];
-
-function normalizePreset(value: SeasonPreset): SeasonPreset {
-  const legacyField = value.field as SeasonPreset["field"] & { relief?: number };
-  const savedField: SeasonPreset["field"] & { relief?: number } = { ...legacyField };
-  delete savedField.relief; // Dropped in contour-3.0; kept tolerant for old saved presets.
-  return {
-    ...initialPreset,
-    ...value,
-    generatorVersion: "contour-3.0",
-    carrier: { ...initialPreset.carrier, ...value.carrier },
-    modulator: { ...initialPreset.modulator, ...value.modulator },
-    field: { ...initialPreset.field, ...savedField },
-    variation: { ...initialPreset.variation, ...value.variation },
-  };
-}
+import { guestSamples, initialEpisode, initialPreset, LIME, PURPLE } from "@/lib/artwork";
+import type { ArtworkFormat, Episode, RenderMode, SeasonPreset, Wave, WidthCurve } from "@/lib/artwork";
+import { prepareGuestImage } from "@/lib/browser-storage";
+import { useCoverDraft } from "@/lib/use-cover-draft";
 
 function hashString(value: string) {
   let hash = 2166136261;
@@ -230,7 +171,6 @@ function YouTubeText({ title, subtitle, width, margin, titleSize, titleY, lineHe
   </>;
 }
 
-type ArtworkFormat = "square" | "story" | "story-clean" | "linkedin" | "youtube";
 type CoverProps = { episode: Episode; preset: SeasonPreset; format: ArtworkFormat; logoData: string; svgRef?: React.RefObject<SVGSVGElement | null> };
 function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
   const square = format === "square"; const linkedin = format === "linkedin"; const youtube = format === "youtube"; const coverLayout = square || linkedin || youtube; const cleanStory = format === "story-clean";
@@ -312,26 +252,33 @@ async function exportCover(svg: SVGSVGElement, width: number, height: number, fi
 }
 
 export default function Home() {
-  const [presets, setPresets] = useState<SeasonPreset[]>([initialPreset]); const [preset, setPreset] = useState<SeasonPreset>(initialPreset);
-  const [episode, setEpisode] = useState<Episode>(initialEpisode); const [exploreSeed, setExploreSeed] = useState(215); const [logoData, setLogoData] = useState(""); const [notice, setNotice] = useState("");
-  const squareRef = useRef<SVGSVGElement>(null); const storyRef = useRef<SVGSVGElement>(null); const cleanStoryRef = useRef<SVGSVGElement>(null); const linkedinRef = useRef<SVGSVGElement>(null); const youtubeRef = useRef<SVGSVGElement>(null); const titleFit = wrapTitle(episode.title, 19, 3);
+  const [exploreSeed, setExploreSeed] = useState(215);
+  const [logoData, setLogoData] = useState("");
+  const [notice, setNotice] = useState("");
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = useCallback((message: string) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice(message);
+    noticeTimer.current = setTimeout(() => setNotice(""), 10000);
+  }, []);
+  const {
+    episode, setEpisode, setEpisodeField, preset, setPreset, presets,
+    updatePreset, selectPreset, savePresetVersion, saveStatus,
+  } = useCoverDraft(showNotice);
+  const squareRef = useRef<SVGSVGElement>(null);
+  const storyRef = useRef<SVGSVGElement>(null);
+  const cleanStoryRef = useRef<SVGSVGElement>(null);
+  const linkedinRef = useRef<SVGSVGElement>(null);
+  const youtubeRef = useRef<SVGSVGElement>(null);
+  const titleFit = wrapTitle(episode.title, 19, 3);
 
   useEffect(() => {
-    // startTransition marks the post-hydration state restore as non-urgent so
-    // the prerendered default view paints first without cascading renders.
-    startTransition(() => {
-      try {
-        const savedPresets = localStorage.getItem(STORAGE_PRESETS); const savedDraft = localStorage.getItem(STORAGE_DRAFT);
-        if (savedPresets) { const parsed = (JSON.parse(savedPresets) as SeasonPreset[]).map(normalizePreset); if (parsed.length) { setPresets(parsed); setPreset(parsed[parsed.length - 1]); } }
-        if (savedDraft) setEpisode(JSON.parse(savedDraft));
-      } catch { /* Safe defaults remain. */ }
-    });
-    fetch("/assets/logo/allesokai-de-logo.svg").then((response) => response.text()).then((source) => setLogoData(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`)).catch(() => undefined);
+    fetch("/assets/logo/allesokai-de-logo.svg").then((response) => response.text()).then((source) => setLogoData("data:image/svg+xml;charset=utf-8," + encodeURIComponent(source))).catch(() => undefined);
   }, []);
-  useEffect(() => { try { localStorage.setItem(STORAGE_DRAFT, JSON.stringify(episode)); } catch { /* best effort */ } }, [episode]);
   useEffect(() => {
     const context = (document as Document & { modelContext?: { registerTool?: (tool: unknown, options?: { signal?: AbortSignal }) => void | Promise<void> } }).modelContext;
-    if (!context?.registerTool) return; const lifecycle = new AbortController();
+    if (!context?.registerTool) return;
+    const lifecycle = new AbortController();
     const configureTool = context.registerTool({
       name: "configure_episode_artwork", title: "Configure episode artwork", description: "Update the visible episode number, title, subtitle, tag, or accent color in the cover maker.",
       inputSchema: { type: "object", properties: { number: { type: "integer", minimum: 0, maximum: 9999 }, title: { type: "string", maxLength: 160 }, subtitle: { type: "string", maxLength: 120 }, tag: { type: "string", maxLength: 40 }, accent: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" } }, additionalProperties: false },
@@ -341,28 +288,24 @@ export default function Home() {
     const saveTool = context.registerTool({
       name: "save_season_preset", title: "Save season preset", description: "Save the currently visible pattern settings as the next version of this season preset in browser storage.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute() {
-        const version = Math.max(0, ...presets.filter((item) => item.id === preset.id).map((item) => item.version)) + 1;
-        const saved = { ...preset, version }; const next = [...presets, saved]; setPresets(next); setPreset(saved); localStorage.setItem(STORAGE_PRESETS, JSON.stringify(next));
-        return { status: "saved", presetId: saved.id, version: saved.version };
-      },
+      execute: savePresetVersion,
     }, { signal: lifecycle.signal });
     void Promise.all([Promise.resolve(configureTool), Promise.resolve(saveTool)]).catch(() => undefined);
     return () => lifecycle.abort();
-  }, [preset, presets]);
-
-  const updatePreset = <K extends keyof SeasonPreset>(key: K, value: SeasonPreset[K]) => setPreset((current) => ({ ...current, [key]: value }));
+  }, [savePresetVersion, setEpisode]);
   const setCarrier = (key: keyof SeasonPreset["carrier"], value: number | Wave) => updatePreset("carrier", { ...preset.carrier, [key]: value });
   const setModulator = (key: keyof SeasonPreset["modulator"], value: number | Wave) => updatePreset("modulator", { ...preset.modulator, [key]: value });
   const setField = (key: keyof SeasonPreset["field"], value: number | RenderMode | WidthCurve) => updatePreset("field", { ...preset.field, [key]: value });
-  const setEpisodeField = <K extends keyof Episode>(key: K, value: Episode[K]) => setEpisode((current) => ({ ...current, [key]: value }));
-  const selectPreset = (value: string) => { const [id, version] = value.split(":"); const found = presets.find((item) => item.id === id && item.version === Number(version)); if (found) setPreset(found); };
-  const savePresetVersion = () => {
-    const version = Math.max(0, ...presets.filter((item) => item.id === preset.id).map((item) => item.version)) + 1; const saved = { ...preset, version }; const next = [...presets, saved];
-    setPresets(next); setPreset(saved); localStorage.setItem(STORAGE_PRESETS, JSON.stringify(next)); setNotice(`${saved.name} saved as v${version}`); setTimeout(() => setNotice(""), 2400);
+  const addGuest = () => { if (!episode.people.some((person) => person.role === "guest")) setEpisodeField("people", [...episode.people, { id: "guest-" + Date.now(), name: "Guest", role: "guest", image: guestSamples[(episode.number + preset.version) % guestSamples.length] }]); };
+  const handleGuestFile = async (file?: File) => {
+    if (!file) return;
+    try {
+      const image = await prepareGuestImage(file);
+      const guest = { id: "guest-" + Date.now(), name: file.name.replace(/\.[^.]+$/, ""), role: "guest" as const, image };
+      setEpisode((current) => ({ ...current, people: [...current.people.filter((person) => person.role !== "guest"), guest] }));
+      showNotice("Guest photo prepared and stored locally.");
+    } catch (error) { showNotice(error instanceof Error ? error.message : "Das Bild konnte nicht geladen werden."); }
   };
-  const addGuest = () => { if (!episode.people.some((person) => person.role === "guest")) setEpisodeField("people", [...episode.people, { id: `guest-${Date.now()}`, name: "Guest", role: "guest", image: guestSamples[(episode.number + preset.version) % guestSamples.length] }]); };
-  const handleGuestFile = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { const guest = { id: `guest-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, ""), role: "guest" as const, image: String(reader.result) }; setEpisodeField("people", [...episode.people.filter((person) => person.role !== "guest"), guest]); }; reader.readAsDataURL(file); };
   const doExport = async (format: ArtworkFormat) => {
     const targets = {
       square: { ref: squareRef, width: 3000, height: 3000, label: "3000 × 3000" },
@@ -371,12 +314,11 @@ export default function Home() {
       linkedin: { ref: linkedinRef, width: 1200, height: 627, label: "1200 × 627" },
       youtube: { ref: youtubeRef, width: 1920, height: 1080, label: "1920 × 1080" },
     } as const;
-    const target = targets[format]; const svg = target.ref.current; if (!svg) return; setNotice(`Rendering ${target.label} PNG…`);
+    const target = targets[format]; const svg = target.ref.current; if (!svg) return; showNotice("Rendering " + target.label + " PNG…");
     try {
-      const result = await exportCover(svg, target.width, target.height, `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`);
-      setNotice(`PNG ready · ${result.width} × ${result.height} · ${Math.round(result.bytes / 1024)} KB`);
-    }
-    catch { setNotice("Export failed — please try again"); } setTimeout(() => setNotice(""), 10000);
+      const result = await exportCover(svg, target.width, target.height, "allesokai-ep" + String(episode.number).padStart(3, "0") + "-" + format + "-preset-v" + preset.version + ".png");
+      showNotice("PNG ready · " + result.width + " × " + result.height + " · " + Math.round(result.bytes / 1024) + " KB");
+    } catch { showNotice("Export failed — please try again"); }
   };
   const sampleEpisode: Episode = { ...initialEpisode, number: exploreSeed, title: "Ein Signal. Viele mögliche Formen.", subtitle: "Season instrument preview", tag: preset.field.mode === "lines" ? "Line study" : "Dot study", accent: LIME, seedOverride: `explore-${exploreSeed}`, people: initialEpisode.people };
   const presetOptions = presets.map((item) => ({ value: `${item.id}:${item.version}`, label: `${item.name} · v${item.version}` }));
@@ -419,6 +361,7 @@ export default function Home() {
         <section className="preview-stage artwork-stage"><div className="stage-head"><div><span className="eyebrow">Output preview</span><h2>Same episode, five compositions</h2></div><span className="seed-badge">Seed {hashString(episodeSeed(episode, preset, "shared-pattern")).toString(16).toUpperCase()}</span></div><div className="artboards"><article className="artboard-card artboard-card--square"><div className="artboard-label"><span>Podcast cover</span><small>3000 × 3000 PNG</small></div><div className="artboard"><CoverArt svgRef={squareRef} episode={episode} preset={preset} format="square" logoData={logoData} /></div><Button onClick={() => doExport("square")}><Download /> Export square</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={storyRef} episode={episode} preset={preset} format="story" logoData={logoData} /></div><Button onClick={() => doExport("story")}><Download /> Export 9:16</Button></article><article className="artboard-card artboard-card--story"><div className="artboard-label"><span>Story · no portraits</span><small>1080 × 1920 PNG</small></div><div className="artboard"><CoverArt svgRef={cleanStoryRef} episode={episode} preset={preset} format="story-clean" logoData={logoData} /></div><Button onClick={() => doExport("story-clean")}><Download /> Export clean 9:16</Button></article><article className="artboard-card artboard-card--linkedin"><div className="artboard-label"><span>LinkedIn</span><small>1200 × 627 PNG · 1.91:1</small></div><div className="artboard"><CoverArt svgRef={linkedinRef} episode={episode} preset={preset} format="linkedin" logoData={logoData} /></div><Button onClick={() => doExport("linkedin")}><Download /> Export LinkedIn</Button></article><article className="artboard-card artboard-card--youtube"><div className="artboard-label"><span>YouTube</span><small>1920 × 1080 PNG · 16:9</small></div><div className="artboard"><CoverArt svgRef={youtubeRef} episode={episode} preset={preset} format="youtube" logoData={logoData} /></div><Button onClick={() => doExport("youtube")}><Download /> Export YouTube</Button></article></div><div className="fallback-note"><strong>Typography prototype</strong><span>Subtitle uses Spock Essentials Alt 1 Regular; YouTube approximates Medium with a light outline. The tag uses a temporary browser-synthesized bold from that face. The annotated Alt 2 Regular and Alt 1 Bold files are not in the supplied archive.</span></div></section>
       </TabsContent>
     </Tabs>
-    {notice && <div className="toast" role="status">{notice}</div>}
+    <p className={`save-status ${saveStatus.includes("nicht") || saveStatus.includes("voll") ? "save-status--error" : ""}`} role="status">{saveStatus}</p>
+    {notice && <div className="toast" role="alert">{notice}</div>}
   </main>;
 }
