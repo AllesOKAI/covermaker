@@ -44,26 +44,29 @@ jobs:
 
       - name: Verify static export serves correctly
         run: |
-          npm run preview &
+          npm run preview > /tmp/covermaker-preview.log 2>&1 &
           PREVIEW_PID=$!
-          sleep 2
-          CSS_FILE=$(ls dist/client/_next/static/css/*.css | head -n 1 | xargs basename)
-          JS_FILE=$(ls dist/client/_next/static/chunks/*.js | head -n 1 | xargs basename)
-          for path in / /index.html /assets/hosts/dennis.jpg "/_next/static/css/$CSS_FILE" "/_next/static/chunks/$JS_FILE"; do
-            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8787$path")
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          CSS_FILE=$(basename "$(ls dist/client/_next/static/css/*.css | head -n 1)")
+          JS_FILE=$(basename "$(ls dist/client/_next/static/chunks/*.js | head -n 1)")
+          PORTRAIT=$(grep -o '/assets/hosts/[a-z]*\.webp' dist/client/index.html | head -n 1)
+          test -n "$PORTRAIT" || { echo 'No portrait found in exported index.html'; exit 1; }
+          for path in / /index.html "$PORTRAIT" "/_next/static/css/$CSS_FILE" "/_next/static/chunks/$JS_FILE"; do
+            for attempt in $(seq 1 30); do
+              STATUS=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8787$path") && break
+              sleep 1
+            done
             if [ "$STATUS" != "200" ]; then
               echo "Preview returned $STATUS for $path"
-              kill $PREVIEW_PID
+              cat /tmp/covermaker-preview.log
               exit 1
             fi
           done
           TRAVERSAL=$(curl -s -o /dev/null -w '%{http_code}' --path-as-is "http://127.0.0.1:8787/../package.json")
           if [ "$TRAVERSAL" != "404" ]; then
             echo "Unexpected traversal status: $TRAVERSAL"
-            kill $PREVIEW_PID
             exit 1
           fi
-          kill $PREVIEW_PID
 
       # Deploy nur bei echten Pushes auf main außer bei Fork-PRs —
       # und übersprungen, wenn die Secrets fehlen (z. B. in Forks).
