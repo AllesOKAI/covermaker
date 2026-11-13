@@ -22,25 +22,25 @@ function formatGeometry(episode: Episode, format: ArtworkFormat): FormatGeometry
     case "square": return {
       width: 1000, height: 1000,
       title: { maxWidth: 1000 - 112 * 2, maxLines: 3, size: long ? 68 : 78 },
-      subtitle: { maxWidth: 1000 - 112 * 2 - 6, maxLines: 1, size: 36 },
+      subtitle: { maxWidth: 1000 - 112 * 2 - 6, maxLines: 2, size: 36 },
       tag: { maxWidth: 1000 - 112 * 2, size: 39 },
     };
     case "story": case "story-clean": return {
       width: 1080, height: 1920,
       title: { maxWidth: 1080 - 92 * 2, maxLines: 5, size: long ? 90 : 102 },
-      subtitle: { maxWidth: 1080 - 92 * 2 - 6, maxLines: 2, size: 48 },
+      subtitle: { maxWidth: 1080 - 92 * 2 - 6, maxLines: 3, size: 48 },
       tag: { maxWidth: 1080 - 72 * 2, size: 64 },
     };
     case "linkedin": return {
       width: 1914, height: 1000,
       title: { maxWidth: 1914 - 112 * 2, maxLines: 3, size: long ? 68 : 78 },
-      subtitle: { maxWidth: 1914 - 112 * 2 - 6, maxLines: 1, size: 36 * 1.5 },
+      subtitle: { maxWidth: 1914 - 112 * 2 - 6, maxLines: 2, size: 36 * 1.5 },
       tag: { maxWidth: 1914 - 112 * 2, size: 39 },
     };
     case "youtube": return {
       width: 1920, height: 1080,
       title: { maxWidth: 1920 - 112 * 2, maxLines: 3, size: (long ? 68 : 78) * 1.15 },
-      subtitle: { maxWidth: 1920 - 112 * 2, maxLines: 2, size: 36 * 1.5 },
+      subtitle: { maxWidth: 1920 - 112 * 2, maxLines: 3, size: 36 * 1.5 },
       tag: { maxWidth: 1920 - 112 * 2, size: 39 },
     };
   }
@@ -106,4 +106,27 @@ export function validateArtwork(episode: Episode, measure: MeasureText): Artwork
     if (fit.warnings.length) report[format] = fit.warnings;
   }
   return report;
+}
+
+// Measured subtitle lines for rendering: wraps to the format's safe width,
+// respects explicit newlines, and truncates with an ellipsis at the line
+// budget so long subtitles stay inside the artwork instead of overlapping
+// the portraits below.
+export function subtitleLines(episode: Episode, format: ArtworkFormat, measure: MeasureText): string[] {
+  const geometry = formatGeometry(episode, format);
+  const spec = { ...SUBTITLE_FONT, size: geometry.subtitle.size };
+  if (!episode.subtitle.trim()) return [];
+  const wrapped = wrapToWidth(episode.subtitle, geometry.subtitle.maxWidth, spec, measure);
+  const capped = wrapped.slice(0, geometry.subtitle.maxLines);
+  if (wrapped.length > capped.length && capped.length) {
+    const last = capped[capped.length - 1];
+    capped[capped.length - 1] = `${last.replace(/[.,;:!?\s]*$/, "")}…`;
+  }
+  return capped;
+}
+
+export function subtitleLineHeight(format: ArtworkFormat): number {
+  // Mirrors the rendered geometry: font size * 1.2 line spacing.
+  const sizes: Record<ArtworkFormat, number> = { square: 36, story: 48, "story-clean": 48, linkedin: 36 * 1.5, youtube: 36 * 1.5 };
+  return sizes[format] * 1.2;
 }

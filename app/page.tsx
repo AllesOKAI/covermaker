@@ -12,7 +12,7 @@ import type { ArtworkFormat, Episode, RenderMode, SeasonPreset, Wave, WidthCurve
 import { prepareGuestImage } from "@/lib/browser-storage";
 import { createCovermakerQuery, createPostprodCommand, coverFileName } from "@/lib/postprod-handoff";
 import { useCoverDraft } from "@/lib/use-cover-draft";
-import { validateArtwork } from "@/lib/artwork-layout";
+import { subtitleLineHeight, subtitleLines, validateArtwork } from "@/lib/artwork-layout";
 import type { MeasureText as LayoutMeasure } from "@/lib/artwork-layout";
 import { createResourceCache, exportAllFormats, exportArtwork } from "@/lib/artwork-export";
 
@@ -175,12 +175,68 @@ function YouTubeText({ title, subtitle, width, margin, titleSize, titleY, lineHe
   </>;
 }
 
+function useMeasuredSubtitle(episode: Episode, format: ArtworkFormat): string[] {
+  const key = `${format}:${episode.subtitle}`;
+  const [measured, setMeasured] = useState<{ key: string; lines: string[] }>({ key: "", lines: [] });
+  const isCurrent = measured.key === key;
+  // Fallback until the fonts load: wrap by character count (10px-per-char
+  // estimate at 36px font), matching the budget from artwork-layout.
+  const fallback = useMemo(() => {
+    if (!episode.subtitle.trim()) return [];
+    const perLine = Math.max(10, Math.floor(subtitleSafeWidth(format) / 10));
+    const words = episode.subtitle.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (next.length <= perLine || !line) line = next; else { lines.push(line); line = word; }
+    }
+    if (line) lines.push(line);
+    return lines.slice(0, subtitleMaxLines(format));
+  }, [episode.subtitle, format]);
+  useEffect(() => {
+    if (!episode.subtitle.trim()) return;
+    let active = true;
+    void (async () => {
+      await document.fonts.load("500 48px SpockEss", episode.subtitle);
+      if (!active) return;
+      const context = document.createElement("canvas").getContext("2d");
+      if (!context) return;
+      const size = subtitleFontSize(format);
+      context.font = `500 ${size}px SpockEss`;
+      const lines = subtitleLines(episode, format, (text) => context.measureText(text).width);
+      if (active) setMeasured({ key, lines });
+    })();
+    return () => { active = false; };
+  }, [key, episode, format]);
+  return isCurrent ? measured.lines : fallback;
+}
+
+function subtitleSafeWidth(format: ArtworkFormat): number {
+  const widths: Record<ArtworkFormat, number> = { square: 770, story: 896, "story-clean": 896, linkedin: 1690, youtube: 1696 };
+  return widths[format];
+}
+
+function subtitleMaxLines(format: ArtworkFormat): number {
+  const budgets: Record<ArtworkFormat, number> = { square: 2, story: 3, "story-clean": 3, linkedin: 2, youtube: 3 };
+  return budgets[format];
+}
+
+function subtitleFontSize(format: ArtworkFormat): number {
+  const sizes: Record<ArtworkFormat, number> = { square: 36, story: 48, "story-clean": 48, linkedin: 36 * 1.5, youtube: 36 * 1.5 };
+  return sizes[format];
+}
+
 type CoverProps = { episode: Episode; preset: SeasonPreset; format: ArtworkFormat; logoData: string; svgRef?: React.RefObject<SVGSVGElement | null> };
 function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
   const square = format === "square"; const linkedin = format === "linkedin"; const youtube = format === "youtube"; const coverLayout = square || linkedin || youtube; const cleanStory = format === "story-clean";
   const width = youtube ? 1920 : linkedin ? 1914 : square ? 1000 : 1080; const height = youtube ? 1080 : coverLayout ? 1000 : 1920;
   const seedKey = episodeSeed(episode, preset, "shared-pattern"); const clipId = `field-${format}-${hashString(seedKey)}`;
   const title = wrapTitle(episode.title, linkedin ? 32 : square ? 19 : 18, coverLayout ? 3 : 5); const people = cleanStory ? [] : episode.people.slice(0, 3);
+  // Subtitle wraps like the title: measured against the format's safe width
+  // with the real fonts, capped at the line budget (lib/artwork-layout).
+  const measuredSubtitle = useMeasuredSubtitle(episode, format);
+  const subtitleLineGap = subtitleLineHeight(format);
   const episodeLabel = String(episode.number).padStart(3, "0");
   const logoHref = logoData ? logoData.replace(/%2394f20d/gi, encodeURIComponent(episode.accent)) : "/assets/logo/allesokai-de-logo.svg";
   const portraitScale = youtube ? 2.1 : 1; const portraitSize = (coverLayout ? 158 : 210) * portraitScale; const portraitRing = 8 * portraitScale;
@@ -206,7 +262,7 @@ function CoverArt({ episode, preset, format, logoData, svgRef }: CoverProps) {
     {youtube ? <YouTubeText title={episode.title} subtitle={episode.subtitle} width={width} margin={titleX} titleSize={titleSize} titleY={titleY} lineHeight={lineHeight} /> : <><text x={titleX} y={titleY} fontFamily="SpockEssBlack" fontWeight="900" fontSize={titleSize} letterSpacing="-2.5" fill={PURPLE}>
       {title.lines.map((line, index) => <tspan key={line + index} x={titleX} dy={index === 0 ? 0 : lineHeight}>{line}</tspan>)}
     </text>
-    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (coverLayout ? 90 : 132)} fontFamily="SpockEss" fontSize={coverLayout ? 36 : 48} fill={PURPLE}>{episode.subtitle}</text>}</>}
+    {episode.subtitle && <text x={titleX + 6} y={titleY + Math.max(0, title.lines.length - 1) * lineHeight + (coverLayout ? 90 : 132)} fontFamily="SpockEss" fontSize={coverLayout ? 36 : 48} fill={PURPLE}>{measuredSubtitle.map((line, index) => <tspan key={line + index} x={titleX + 6} dy={index === 0 ? 0 : subtitleLineGap}>{line}</tspan>)}</text>}</>}
     {people.map((person, index) => {
       const cx = portraitStart + index * (portraitSize + portraitGap) + portraitSize / 2; const cy = portraitY + portraitSize / 2;
       return <g key={person.id}><circle cx={cx} cy={cy} r={portraitSize / 2} fill={episode.accent} /><image href={person.image} x={cx - portraitSize / 2 + portraitRing} y={cy - portraitSize / 2 + portraitRing} width={portraitSize - portraitRing * 2} height={portraitSize - portraitRing * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#portrait-${format}-${person.id})`} /></g>;
@@ -416,7 +472,7 @@ export default function Home() {
       <TabsContent value="artwork" className="workspace">
         <aside className="control-panel">
           <div className="panel-heading"><div><span className="eyebrow">Episode production</span><h1>Compose artwork</h1></div><ImagePlus size={20} /></div>
-          <section className="control-section"><div className="section-title"><span>01</span><h2>Episode</h2></div><div className="two-fields"><label className="field-control"><span>Number</span><Input type="number" min={0} max={9999} value={episode.number} onChange={(event) => setEpisodeField("number", Number(event.target.value))} /></label><label className="field-control"><span>Accent</span><span className="color-input"><input type="color" value={episode.accent} onChange={(event) => setEpisodeField("accent", event.target.value.toUpperCase())} /><code>{episode.accent}</code></span></label></div><label className="field-control"><span>Title <em>{episode.title.length}/72</em></span><textarea rows={3} value={episode.title} onChange={(event) => setEpisodeField("title", event.target.value)} /></label>{titleFit.overflow && <div className="warning">The square title exceeds the safe three-line box. Shorten it before final export.</div>}{totalWarnings > 0 && fontMeasure && <div className="warning">{totalWarnings} layout {totalWarnings === 1 ? "warning" : "warnings"} across the artboards — see the flagged formats below.</div>}<label className="field-control"><span>Subtitle <em>optional</em></span><Input value={episode.subtitle} onChange={(event) => setEpisodeField("subtitle", event.target.value)} placeholder="with / featuring…" /></label><label className="field-control"><span>Type tag <em>optional</em></span><Input value={episode.tag} onChange={(event) => setEpisodeField("tag", event.target.value)} placeholder="Interview" /></label><label className="field-control"><span>Seed override <em>optional</em></span><Input value={episode.seedOverride} onChange={(event) => setEpisodeField("seedOverride", event.target.value)} placeholder="Uses episode number + title" /></label><p className="field-note">Title changes create a new pattern unless you freeze the identity with a seed override.</p></section>
+          <section className="control-section"><div className="section-title"><span>01</span><h2>Episode</h2></div><div className="two-fields"><label className="field-control"><span>Number</span><Input type="number" min={0} max={9999} value={episode.number} onChange={(event) => setEpisodeField("number", Number(event.target.value))} /></label><label className="field-control"><span>Accent</span><span className="color-input"><input type="color" value={episode.accent} onChange={(event) => setEpisodeField("accent", event.target.value.toUpperCase())} /><code>{episode.accent}</code></span></label></div><label className="field-control"><span>Title <em>{episode.title.length}/72</em></span><textarea rows={3} value={episode.title} onChange={(event) => setEpisodeField("title", event.target.value)} /></label>{titleFit.overflow && <div className="warning">The square title exceeds the safe three-line box. Shorten it before final export.</div>}{totalWarnings > 0 && fontMeasure && <div className="warning">{totalWarnings} layout {totalWarnings === 1 ? "warning" : "warnings"} across the artboards — see the flagged formats below.</div>}<label className="field-control"><span>Subtitle <em>optional · mehrzeilig</em></span><textarea rows={2} value={episode.subtitle} onChange={(event) => setEpisodeField("subtitle", event.target.value)} placeholder="with / featuring…" /></label><label className="field-control"><span>Type tag <em>optional</em></span><Input value={episode.tag} onChange={(event) => setEpisodeField("tag", event.target.value)} placeholder="Interview" /></label><label className="field-control"><span>Seed override <em>optional</em></span><Input value={episode.seedOverride} onChange={(event) => setEpisodeField("seedOverride", event.target.value)} placeholder="Uses episode number + title" /></label><p className="field-note">Title changes create a new pattern unless you freeze the identity with a seed override.</p></section>
           <section className="control-section"><div className="section-title"><span>02</span><h2>People</h2></div><div className="people-list">{episode.people.map((person) => <div className="person-row" key={person.id}>{/* eslint-disable @next/next/no-img-element -- src is a static path or a user-upload data URL, which next/image cannot optimize */}<img src={person.image} alt="" />{/* eslint-enable @next/next/no-img-element */}<div><strong>{person.name}</strong><small>{person.role}</small></div>{person.role === "guest" && <button aria-label="Remove guest" onClick={() => setEpisodeField("people", episode.people.filter((item) => item.id !== person.id))}><Trash2 size={16} /></button>}</div>)}</div>{!episode.people.some((person) => person.role === "guest") && <Button variant="outline" className="full-button" onClick={addGuest}><Plus /> Add sample guest</Button>}<label className="upload-button"><Users size={16} /> Use guest photo<input type="file" accept="image/*" onChange={(event) => handleGuestFile(event.target.files?.[0])} /></label></section>
           <section className="control-section compact-section"><div className="section-title"><span>03</span><h2>Season pattern</h2></div><SelectControl label="Preset" value={`${preset.id}:${preset.version}`} onChange={selectPreset} options={presetOptions} /></section>
         </aside>

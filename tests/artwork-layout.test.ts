@@ -39,9 +39,9 @@ test("warns when the square title exceeds its line budget", () => {
 });
 
 test("subtitle and tag produce warnings when they exceed their safe widths", () => {
-  // Subtitle safe width: 770px = 77 chars; 80 chars overflow.
+  // Square subtitle: 770px wide, 2 lines = 154 chars. 170 chars overflow the line budget.
   // Tag safe width: 776px = 77 chars; 80 chars overflow.
-  const wide = { ...episode, subtitle: "ein subtitle das mit achtzig zeichen deutlich zu lang ist um hier noch zu passen genau", tag: "Ein Tag mit eighty Zeichen der ebenfalls eindeutig zu breit ist fuer die Zeile hier genomm" };
+  const wide = { ...episode, subtitle: "ein subtitle der mit einhundertsiebzig zeichen deutlich ueber das zweizeilige budget im quadratischen format hinausgeht und deshalb eine warnung ausloesen muss damit niemand abgeschnittene untertitel exportiert aus versehen noch mehr text damit es sicher reicht", tag: "Ein Tag mit eighty Zeichen der ebenfalls eindeutig zu breit ist fuer die Zeile hier genomm" };
   const fit = fitArtworkText(wide, "square", measure);
   assert.ok(fit.warnings.some((warning) => /subtitle/i.test(warning)), JSON.stringify(fit.warnings));
   assert.ok(fit.warnings.some((warning) => /tag/i.test(warning)), JSON.stringify(fit.warnings));
