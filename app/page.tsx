@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, ImagePlus, Plus, RotateCcw, Save, Sparkles, Trash2, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
@@ -303,7 +303,7 @@ export default function Home() {
   }, []);
   const {
     episode, setEpisode, setEpisodeField, preset, setPreset, presets,
-    updatePreset, selectPreset, savePresetVersion, saveStatus, queryApplied,
+    updatePreset, selectPreset, savePresetVersion, saveStatus, queryApplied, hydrated,
   } = useCoverDraft(showNotice);
   const [videoPath, setVideoPath] = useState("");
   const [coverDir, setCoverDir] = useState("");
@@ -410,8 +410,8 @@ export default function Home() {
     linkedin: { svg: linkedinRef.current, width: 1200, height: 627, label: "LinkedIn" },
     youtube: { svg: youtubeRef.current, width: 1920, height: 1080, label: "YouTube" },
   });
-  const exportFilename = (format: ArtworkFormat) => `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`;
-  const doExport = async (format: ArtworkFormat) => {
+  const exportFilename = useCallback((format: ArtworkFormat) => `allesokai-ep${String(episode.number).padStart(3, "0")}-${format}-preset-v${preset.version}.png`, [episode.number, preset.version]);
+  const doExport = useCallback(async (format: ArtworkFormat) => {
     if (exportingFormat) return;
     const targets = exportTargets();
     const target = targets[format];
@@ -422,7 +422,7 @@ export default function Home() {
       if (outcome.ok) showNotice(`PNG ready · ${outcome.result.width} × ${outcome.result.height} · ${Math.round(outcome.result.bytes / 1024)} KB`);
       else showNotice(outcome.message);
     } finally { setExportingFormat(null); }
-  };
+  }, [exportingFormat, exportCache, exportFilename, showNotice]);
   const doExportAll = async () => {
     if (exportingFormat) return;
     const targets = exportTargets();
@@ -438,6 +438,19 @@ export default function Home() {
       else showNotice(`${results.length - failed.length}/${results.length} exports succeeded — failed: ${failed.map((entry) => entry.label).join(", ")}`);
     } finally { setExportingFormat(null); }
   };
+  // Optionaler Headless-Trigger ?export=<format>: ein einmaliger Export nach
+  // der Hydratation. Ohne Parameter bleibt der normale Browserbetrieb gleich.
+  const autoExportDone = useRef(false);
+  useEffect(() => {
+    if (autoExportDone.current || !hydrated) return;
+    const format = new URLSearchParams(window.location.search).get("export");
+    if (!format) return;
+    autoExportDone.current = true;
+    const lifecycle = new AbortController();
+    const valid = ["square", "story", "story-clean", "linkedin", "youtube"];
+    if (valid.includes(format)) startTransition(() => { if (!lifecycle.signal.aborted) void doExport(format as ArtworkFormat); });
+    return () => lifecycle.abort();
+  }, [hydrated, doExport]);
   const sampleEpisode: Episode = { ...initialEpisode, number: exploreSeed, title: "Ein Signal. Viele mögliche Formen.", subtitle: "Season instrument preview", tag: preset.field.mode === "lines" ? "Line study" : "Dot study", accent: LIME, seedOverride: `explore-${exploreSeed}`, people: initialEpisode.people };
   const presetOptions = presets.map((item) => ({ value: `${item.id}:${item.version}`, label: `${item.name} · v${item.version}` }));
 

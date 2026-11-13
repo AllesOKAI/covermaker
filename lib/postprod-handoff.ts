@@ -5,6 +5,30 @@ const EPISODE_LIMITS = { title: 160, subtitle: 160, tag: 80, seedOverride: 160 }
 
 export type EpisodeUpdate = Partial<Pick<Episode, "number" | "title" | "subtitle" | "tag" | "accent">>;
 
+// Guest injection from query params: a data URL for the guest portrait plus
+// an optional name. Used by the headless renderer (render-headless.mjs) to
+// pass a local file into the artwork without touching localStorage.
+export type GuestUpdate = { image: string; name?: string };
+
+export function readGuestQuery(params: URLSearchParams): GuestUpdate | null {
+  const rawImage = params.get("gast") ?? params.get("guest");
+  if (rawImage === null || rawImage.trim() === "") return null;
+  const image = rawImage.trim();
+  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) return null;
+  const rawName = params.get("gastname") ?? params.get("guestname");
+  const name = rawName !== null && rawName.trim() !== "" ? Array.from(rawName.trim()).slice(0, 100).join("") : undefined;
+  return { image, name };
+}
+
+export function guestToPerson(guest: GuestUpdate, fallbackNumber: number): { id: string; name: string; role: "guest"; image: string } {
+  return {
+    id: "guest-query-" + fallbackNumber,
+    name: guest.name ?? "Gast",
+    role: "guest",
+    image: guest.image,
+  };
+}
+
 // Query parameters prefill the editor: ep/episode for the number and
 // titel/title for the title (German first, English as alias). Blank or
 // invalid values never override the restored draft.
@@ -19,6 +43,10 @@ export function readEpisodeQuery(params: URLSearchParams): EpisodeUpdate {
   if (rawTitle !== null && rawTitle.trim() !== "") {
     update.title = Array.from(rawTitle.trim()).slice(0, EPISODE_LIMITS.title).join("");
   }
+  const rawSubtitle = params.get("subtitel") ?? params.get("subtitle");
+  if (rawSubtitle !== null && rawSubtitle.trim() !== "") {
+    update.subtitle = Array.from(rawSubtitle.trim()).slice(0, EPISODE_LIMITS.subtitle).join("");
+  }
   return update;
 }
 
@@ -26,6 +54,7 @@ export function createCovermakerQuery(episode: Episode): URLSearchParams {
   const params = new URLSearchParams();
   params.set("ep", String(episode.number));
   if (episode.title) params.set("titel", episode.title);
+  if (episode.subtitle) params.set("subtitel", episode.subtitle);
   return params;
 }
 

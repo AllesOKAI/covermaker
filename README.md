@@ -29,6 +29,26 @@ Podcast-MP3 eingebettet. Query-Parameter überschreiben beim Laden nur
 die angegebenen Felder; ohne Parameter bleibt der gespeicherte Entwurf
 unverändert.
 
+### Headless-Rendering (automatisiert)
+
+`scripts/render-headless.mjs` rendert Covers direkt aus dem statischen
+Build (`npm run build` vorher ausführen; Playwright-Chromium via
+`npx playwright install chromium`). Gleiche Rendering-Engine wie im
+Browser — dieselbe Rendering-Engine und Exportfunktion wie im sichtbaren
+Browser, kein Screenshot- oder Hilfsrenderer.
+
+```sh
+node scripts/render-headless.mjs --ep 217 --titel 'Wenn Maschinen mitdenken' \
+  --subtitel $'KI zwischen Hype und Handwerk' --format square --out cover.png
+```
+
+Mehrzeilige Subtitel können mit `$'Text\nZweite Zeile'` übergeben werden.
+
+Gästebilder als lokaler Dateipfad (`--gast`/`--gastname`) werden per
+localStorage-Draft injiziert — der normale Browserbetrieb mit Upload
+bleibt davon unberührt. `../postprod/steps/cover.sh` kapselt das für
+die Post-Production-Pipeline.
+
 ## Stack
 
 - **Next.js-API auf Vite** ([vinext](https://github.com/cloudflare/vinext))
