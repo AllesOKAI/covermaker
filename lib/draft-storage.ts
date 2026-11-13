@@ -1,5 +1,6 @@
 import { initialEpisode, initialPreset, normalizeEpisode, normalizePreset } from "./artwork.ts";
 import type { Draft, Episode, SeasonPreset } from "./artwork.ts";
+export type { Draft };
 
 export const STORAGE_PRESETS = "allesokai-cover-presets-v4";
 export const STORAGE_DRAFT = "allesokai-cover-draft-v5";

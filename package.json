@@ -11,7 +11,10 @@
     "build": "vinext build",
     "preview": "vite preview --host 127.0.0.1 --port 8787 --strictPort",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "preview": "node scripts/preview.mjs"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",

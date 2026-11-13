@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createResourceCache, describeExportError } from "../lib/artwork-export.ts";
 
 test("resource cache fetches every asset exactly once", async () => {
-  const fetches = [];
+  const fetches: string[] = [];
   const cache = createResourceCache(async (url: string) => {
     fetches.push(url);
     return `data:${url}`;

@@ -31,8 +31,39 @@ jobs:
       - name: Install dependencies
         run: npm run install:ci
 
+      - name: Lint and typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Tests
+        run: npm test
+
       - name: Build
         run: npm run build
+
+      - name: Verify static export serves correctly
+        run: |
+          npm run preview &
+          PREVIEW_PID=$!
+          sleep 2
+          CSS_FILE=$(ls dist/client/_next/static/css/*.css | head -n 1 | xargs basename)
+          JS_FILE=$(ls dist/client/_next/static/chunks/*.js | head -n 1 | xargs basename)
+          for path in / /index.html /assets/hosts/dennis.jpg "/_next/static/css/$CSS_FILE" "/_next/static/chunks/$JS_FILE"; do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8787$path")
+            if [ "$STATUS" != "200" ]; then
+              echo "Preview returned $STATUS for $path"
+              kill $PREVIEW_PID
+              exit 1
+            fi
+          done
+          TRAVERSAL=$(curl -s -o /dev/null -w '%{http_code}' --path-as-is "http://127.0.0.1:8787/../package.json")
+          if [ "$TRAVERSAL" != "404" ]; then
+            echo "Unexpected traversal status: $TRAVERSAL"
+            kill $PREVIEW_PID
+            exit 1
+          fi
+          kill $PREVIEW_PID
 
       # Deploy nur bei echten Pushes auf main außer bei Fork-PRs —
       # und übersprungen, wenn die Secrets fehlen (z. B. in Forks).

@@ -47,7 +47,7 @@ export async function prepareGuestImage(file: Blob, environment?: ImageEnvironme
 }
 
 async function normalizeDataImages(draft: Draft): Promise<Draft> {
-  const people = await Promise.all(draft.episode.people.map(async (person) => {
+  const people = await Promise.all(draft.episode.people.map(async (person: typeof draft.episode.people[number]) => {
     if (!person.image.startsWith("data:") || person.image.length < 1_000_000) return person;
     try {
       const blob = await (await fetch(person.image)).blob();

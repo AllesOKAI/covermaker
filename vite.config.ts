@@ -9,8 +9,4 @@ export default defineConfig({
       : {}),
   },
   plugins: [vinext()],
-  preview: {
-    // Serve the static export for a production-like local preview.
-    outDir: "dist/client",
-  },
 });

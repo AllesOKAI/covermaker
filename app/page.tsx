@@ -12,7 +12,7 @@ import type { ArtworkFormat, Episode, RenderMode, SeasonPreset, Wave, WidthCurve
 import { prepareGuestImage } from "@/lib/browser-storage";
 import { useCoverDraft } from "@/lib/use-cover-draft";
 import { validateArtwork } from "@/lib/artwork-layout";
-import type { ArtworkFormat as LayoutFormat, MeasureText as LayoutMeasure } from "@/lib/artwork-layout";
+import type { MeasureText as LayoutMeasure } from "@/lib/artwork-layout";
 import { createResourceCache, exportAllFormats, exportArtwork } from "@/lib/artwork-export";
 
 function hashString(value: string) {
@@ -280,7 +280,7 @@ export default function Home() {
     if (!fontMeasure) return {};
     return validateArtwork(episode, fontMeasure);
   }, [episode, fontMeasure]);
-  const formatWarnings = (format: LayoutFormat) => layoutWarnings[format] ?? [];
+  const formatWarnings = (format: ArtworkFormat) => layoutWarnings[format] ?? [];
   const totalWarnings = Object.values(layoutWarnings).reduce((count, list) => count + (list?.length ?? 0), 0);
 
   useEffect(() => {
