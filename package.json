@@ -10,7 +10,8 @@
     "start": "vite",
     "build": "vinext build",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/render-headless-server.test.mjs",
+    "test:browser": "npm run build && node --experimental-strip-types --test tests/headless-guest-browser.test.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "preview": "node scripts/preview.mjs"

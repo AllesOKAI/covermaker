@@ -63,7 +63,8 @@ die Post-Production-Pipeline.
 npm install      # Abhängigkeiten installieren
 npm start        # Vite-Devserver mit HMR auf http://localhost:5173
 npm run lint     # ESLint
-npm run test     # Unit-Tests (Node Test Runner)
+npm run test     # Unit-Tests (ohne Browser-Binary)
+npm run test:browser # Optional: Browser-E2E (npm run build + Playwright)
 npm run typecheck # TypeScript-Prüfung
 npm run check    # Lint + Typecheck + Tests + Build (CI-Pfad)
 npm run build    # Statischer Export nach dist/client/
